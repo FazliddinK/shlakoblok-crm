@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { requireAuth } from "@/lib/auth";
+import { requireAdmin, requireAuth } from "@/lib/auth";
 import { getFinanceSummary } from "@/lib/finance";
 import { sendTelegramMessage, formatTelegramMessage, operatorFromSession } from "@/lib/telegram";
 
@@ -13,7 +13,7 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
-  const auth = await requireAuth();
+  const auth = await requireAdmin();
   if ("error" in auth) return auth.error;
 
   const { openingBalance } = await request.json();

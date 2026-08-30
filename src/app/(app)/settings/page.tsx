@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Trash2, KeyRound, UserPlus, Shield } from "lucide-react";
+import { Plus, Trash2, KeyRound, UserPlus, Shield, Wallet } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatCurrency } from "@/lib/labels";
 import {
   Dialog,
   DialogContent,
@@ -66,11 +67,26 @@ export default function SettingsPage() {
   const [userMsg, setUserMsg] = useState("");
   const [userError, setUserError] = useState("");
 
+  const [openingBalance, setOpeningBalance] = useState("");
+  const [cashBalance, setCashBalance] = useState<number | null>(null);
+  const [financeMsg, setFinanceMsg] = useState("");
+  const [financeError, setFinanceError] = useState("");
+  const [financeLoading, setFinanceLoading] = useState(false);
+
   const load = useCallback(async () => {
-    const meRes = await fetch("/api/auth/me");
+    const [meRes, financeRes] = await Promise.all([
+      fetch("/api/auth/me"),
+      fetch("/api/finance"),
+    ]);
     const me = await meRes.json();
     setUserName(me.user?.displayName ?? "");
     setIsAdmin(me.user?.role === "admin");
+
+    if (financeRes.ok) {
+      const finance = await financeRes.json();
+      setOpeningBalance(String(finance.openingBalance ?? 0));
+      setCashBalance(finance.cashBalance ?? null);
+    }
 
     if (me.user?.role === "admin") {
       const usersRes = await fetch("/api/users");
@@ -158,6 +174,28 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleSaveOpeningBalance(e: React.FormEvent) {
+    e.preventDefault();
+    setFinanceMsg("");
+    setFinanceError("");
+    setFinanceLoading(true);
+
+    const res = await fetch("/api/finance", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ openingBalance: Number(openingBalance) || 0 }),
+    });
+    const data = await res.json();
+    setFinanceLoading(false);
+
+    if (res.ok) {
+      setFinanceMsg("Начальный остаток сохранён");
+      load();
+    } else {
+      setFinanceError(data.error || "Ошибка сохранения");
+    }
+  }
+
   async function handleDeleteUser(id: string, name: string) {
     if (!confirm(`Удалить пользователя ${name}?`)) return;
 
@@ -179,7 +217,7 @@ export default function SettingsPage() {
     <div>
       <PageHeader
         title="Настройки"
-        description="Смена пароля и управление пользователями"
+        description="Пароль, касса и пользователи"
         userName={userName}
       />
 
@@ -194,7 +232,61 @@ export default function SettingsPage() {
         </div>
       )}
 
+      {financeMsg && (
+        <div className="mb-4 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">
+          {financeMsg}
+        </div>
+      )}
+      {financeError && (
+        <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">
+          {financeError}
+        </div>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-2">
+        {isAdmin && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Wallet className="h-4 w-4 text-orange-500" />
+                Начальный остаток кассы
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSaveOpeningBalance} className="space-y-4">
+                <p className="text-sm text-zinc-500">
+                  Сумма в кассе на начало работы. Текущий остаток считается так:
+                  начальный остаток + оплаченные продажи и предоплаты − расходы.
+                </p>
+                {cashBalance !== null && (
+                  <p className="rounded-lg bg-zinc-50 px-3 py-2 text-sm">
+                    Сейчас в кассе:{" "}
+                    <span className="font-semibold">{formatCurrency(cashBalance)}</span>
+                  </p>
+                )}
+                <div className="space-y-2">
+                  <Label htmlFor="openingBalance">Начальный остаток, сум</Label>
+                  <Input
+                    id="openingBalance"
+                    type="number"
+                    min={0}
+                    value={openingBalance}
+                    onChange={(e) => setOpeningBalance(e.target.value)}
+                    required
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  className="bg-orange-500 hover:bg-orange-600"
+                  disabled={financeLoading}
+                >
+                  Сохранить остаток
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
