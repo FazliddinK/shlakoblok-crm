@@ -17,24 +17,47 @@ async function main() {
     },
   });
 
+  await prisma.appSettings.upsert({
+    where: { id: "default" },
+    update: {},
+    create: { openingBalance: 500000 },
+  });
+
   const client1 = await prisma.client.upsert({
-    where: { id: "seed-client-1" },
+    where: { licensePlate: "A123BC777" },
     update: {},
     create: {
-      id: "seed-client-1",
       carBrand: "Toyota Camry",
-      licensePlate: "А123БВ777",
-      phone: "+7 (999) 111-22-33",
+      licensePlate: "A123BC777",
+      phone: "+998 90 123-45-67",
       notes: "Постоянный клиент",
     },
   });
 
-  const client2 = await prisma.client.create({
-    data: {
+  const client2 = await prisma.client.upsert({
+    where: { licensePlate: "B456KM750" },
+    update: {},
+    create: {
       carBrand: "GAZelle Next",
-      licensePlate: "В456КМ750",
-      phone: "+7 (916) 444-55-66",
+      licensePlate: "B456KM750",
+      phone: "+998 91 444-55-66",
     },
+  });
+
+  const cat1 = await prisma.expenseCategory.upsert({
+    where: { name: "Транспорт" },
+    update: {},
+    create: { name: "Транспорт" },
+  });
+
+  const cat2 = await prisma.expenseCategory.upsert({
+    where: { name: "Зарплата" },
+    update: {},
+    create: { name: "Зарплата" },
+  });
+
+  const cp1 = await prisma.counterparty.create({
+    data: { name: "ООО ТрансЛогистик", phone: "+998 71 200-00-00" },
   });
 
   await prisma.sale.createMany({
@@ -42,19 +65,36 @@ async function main() {
       {
         clientId: client1.id,
         quantity: 500,
-        pricePerUnit: 85,
-        totalPrice: 42500,
+        pricePerUnit: 85000,
+        totalPrice: 42500000,
+        paymentType: "paid",
         userId: admin.id,
         notes: "Самовывоз",
       },
       {
         clientId: client2.id,
         quantity: 1200,
-        pricePerUnit: 82,
-        totalPrice: 98400,
+        pricePerUnit: 82000,
+        totalPrice: 98400000,
+        paymentType: "debt",
         userId: admin.id,
       },
     ],
+  });
+
+  await prisma.client.update({
+    where: { id: client2.id },
+    data: { balance: 98400000 },
+  });
+
+  await prisma.expense.create({
+    data: {
+      categoryId: cat1.id,
+      counterpartyId: cp1.id,
+      amount: 1500000,
+      note: "Доставка блоков",
+      userId: admin.id,
+    },
   });
 
   console.log("Seed completed. Login: admin / admin123");

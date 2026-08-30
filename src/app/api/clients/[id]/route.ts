@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
+import { archiveRecord } from "@/lib/finance";
 import { sendTelegramMessage, formatTelegramMessage, operatorFromSession } from "@/lib/telegram";
 
 type Params = { params: Promise<{ id: string }> };
@@ -44,7 +45,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
     formatTelegramMessage(
       "изменение",
       "Клиент",
-      `🚗 Марка: ${client.carBrand}\n🔢 Гос. номер: ${client.licensePlate}\n📞 Телефон: ${client.phone || "—"}`,
+      `🚗 ${client.carBrand}\n🔢 ${client.licensePlate}`,
       operatorFromSession(auth.session),
     ),
   );
@@ -57,19 +58,41 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
   if ("error" in auth) return auth.error;
 
   const { id } = await params;
-  const client = await prisma.client.findUnique({ where: { id } });
+  const client = await prisma.client.findUnique({
+    where: { id },
+    include: { sales: true },
+  });
 
   if (!client) {
     return NextResponse.json({ error: "Клиент не найден" }, { status: 404 });
   }
 
+  for (const sale of client.sales) {
+    await archiveRecord(
+      "sale",
+      sale.id,
+      `${client.licensePlate} — ${sale.totalPrice} сум`,
+      { ...sale, client },
+      auth.session.userId,
+    );
+  }
+
+  await archiveRecord(
+    "client",
+    client.id,
+    `${client.carBrand} (${client.licensePlate})`,
+    client,
+    auth.session.userId,
+  );
+
+  await prisma.sale.deleteMany({ where: { clientId: id } });
   await prisma.client.delete({ where: { id } });
 
   await sendTelegramMessage(
     formatTelegramMessage(
       "удаление",
       "Клиент",
-      `🚗 Марка: ${client.carBrand}\n🔢 Гос. номер: ${client.licensePlate}`,
+      `🚗 ${client.carBrand}\n🔢 ${client.licensePlate}`,
       operatorFromSession(auth.session),
     ),
   );

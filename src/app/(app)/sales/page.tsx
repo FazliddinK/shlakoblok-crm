@@ -30,7 +30,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatCurrency, formatDateTime } from "@/lib/labels";
+import { PAYMENT_TYPE_LABELS } from "@/lib/constants";
 import { printReceipt, type SaleWithRelations } from "@/components/sales/receipt";
+import { Badge } from "@/components/ui/badge";
 
 interface Client {
   id: string;
@@ -57,6 +59,7 @@ export default function SalesPage() {
     pricePerUnit: "85",
     totalPrice: "",
     notes: "",
+    paymentType: "paid",
   });
 
   const load = useCallback(async () => {
@@ -77,6 +80,18 @@ export default function SalesPage() {
     return () => clearTimeout(t);
   }, [load]);
 
+  function onPlateChange(plate: string) {
+    const upper = plate.toUpperCase();
+    const found = clients.find((c) => c.licensePlate === upper);
+    setForm((f) => ({
+      ...f,
+      licensePlate: upper,
+      carBrand: found?.carBrand ?? f.carBrand,
+      phone: found?.phone ?? f.phone,
+      clientId: found?.id ?? "",
+    }));
+  }
+
   function recalcTotal(qty: string, price: string) {
     const q = Number(qty);
     const p = Number(price);
@@ -96,6 +111,7 @@ export default function SalesPage() {
       pricePerUnit: "85",
       totalPrice: "",
       notes: "",
+      paymentType: "paid",
     });
     setOpen(true);
   }
@@ -112,6 +128,7 @@ export default function SalesPage() {
       pricePerUnit: String(sale.pricePerUnit),
       totalPrice: String(sale.totalPrice),
       notes: sale.notes,
+      paymentType: sale.paymentType ?? "paid",
     });
     setOpen(true);
   }
@@ -127,16 +144,18 @@ export default function SalesPage() {
           pricePerUnit: Number(form.pricePerUnit),
           totalPrice: total,
           notes: form.notes,
+          paymentType: form.paymentType,
         }
       : {
           clientId: mode === "existing" ? form.clientId : undefined,
-          carBrand: mode === "new" ? form.carBrand : undefined,
-          licensePlate: mode === "new" ? form.licensePlate : undefined,
-          phone: mode === "new" ? form.phone : undefined,
+          carBrand: form.carBrand || undefined,
+          licensePlate: form.licensePlate || undefined,
+          phone: form.phone || undefined,
           quantity: Number(form.quantity),
           pricePerUnit: Number(form.pricePerUnit),
           totalPrice: total,
           notes: form.notes,
+          paymentType: form.paymentType,
         };
 
     const url = editing ? `/api/sales/${editing.id}` : "/api/sales";
@@ -204,6 +223,7 @@ export default function SalesPage() {
                 <TableHead className="hidden md:table-cell">Гос. номер</TableHead>
                 <TableHead>Кол-во</TableHead>
                 <TableHead>Цена/шт</TableHead>
+                <TableHead>Оплата</TableHead>
                 <TableHead>Итого</TableHead>
                 <TableHead className="w-32">Действия</TableHead>
               </TableRow>
@@ -220,6 +240,19 @@ export default function SalesPage() {
                   </TableCell>
                   <TableCell>{sale.quantity} шт</TableCell>
                   <TableCell>{formatCurrency(sale.pricePerUnit)}</TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={
+                        sale.paymentType === "debt"
+                          ? "destructive"
+                          : sale.paymentType === "prepayment"
+                            ? "secondary"
+                            : "outline"
+                      }
+                    >
+                      {PAYMENT_TYPE_LABELS[sale.paymentType] ?? "Оплачено"}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="font-semibold">
                     {formatCurrency(sale.totalPrice)}
                   </TableCell>
@@ -310,12 +343,18 @@ export default function SalesPage() {
                   <Label>Гос. номер *</Label>
                   <Input
                     value={form.licensePlate}
-                    onChange={(e) =>
-                      setForm({ ...form, licensePlate: e.target.value.toUpperCase() })
-                    }
+                    onChange={(e) => onPlateChange(e.target.value)}
+                    list="plates-list"
                     className="font-mono uppercase"
                     disabled={!!editing}
                   />
+                  <datalist id="plates-list">
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.licensePlate}>
+                        {c.carBrand}
+                      </option>
+                    ))}
+                  </datalist>
                 </div>
                 {!editing && (
                   <div className="grid gap-2">
@@ -351,7 +390,7 @@ export default function SalesPage() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label>Цена/шт, ₽ *</Label>
+                <Label>Цена/шт, сум *</Label>
                 <Input
                   type="number"
                   min={1}
@@ -367,7 +406,7 @@ export default function SalesPage() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label>Итого, ₽</Label>
+                <Label>Итого, сум</Label>
                 <Input
                   type="number"
                   min={1}
@@ -376,6 +415,23 @@ export default function SalesPage() {
                   className="font-semibold"
                 />
               </div>
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Тип оплаты *</Label>
+              <Select
+                value={form.paymentType}
+                onValueChange={(v) => v && setForm({ ...form, paymentType: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="paid">Оплачено</SelectItem>
+                  <SelectItem value="debt">В долг</SelectItem>
+                  <SelectItem value="prepayment">Предоплата</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid gap-2">

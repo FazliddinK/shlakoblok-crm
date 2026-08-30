@@ -1,5 +1,6 @@
 import type { Sale, Client, User } from "@prisma/client";
 import { formatCurrency, formatDateTime } from "@/lib/labels";
+import { PAYMENT_TYPE_LABELS } from "@/lib/constants";
 
 export type SaleWithRelations = Sale & {
   client: Client;
@@ -39,6 +40,10 @@ export function Receipt({ sale }: ReceiptProps) {
         <Row label="Наименование" value="Шлакоблок" />
         <Row label="Количество" value={`${sale.quantity} шт`} />
         <Row label="Цена за шт" value={formatCurrency(sale.pricePerUnit)} />
+        <Row
+          label="Оплата"
+          value={PAYMENT_TYPE_LABELS[sale.paymentType] ?? sale.paymentType}
+        />
       </div>
 
       <div className="mt-3 border-t border-double border-black pt-2">

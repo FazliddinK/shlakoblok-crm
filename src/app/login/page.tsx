@@ -86,9 +86,6 @@ export default function LoginPage() {
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Войти"}
             </Button>
           </form>
-          <p className="mt-4 text-center text-xs text-zinc-400">
-            По умолчанию: admin / admin123
-          </p>
         </CardContent>
       </Card>
     </div>

@@ -30,6 +30,7 @@ interface Client {
   carBrand: string;
   licensePlate: string;
   phone: string;
+  balance: number;
 }
 
 export default function ClientsPage() {
@@ -134,6 +135,7 @@ export default function ClientsPage() {
                 <TableHead>Марка авто</TableHead>
                 <TableHead>Гос. номер</TableHead>
                 <TableHead className="hidden sm:table-cell">Телефон</TableHead>
+                <TableHead>Баланс</TableHead>
                 <TableHead>Продаж</TableHead>
                 <TableHead className="w-24">Действия</TableHead>
               </TableRow>
@@ -144,6 +146,19 @@ export default function ClientsPage() {
                   <TableCell className="font-medium">{client.carBrand}</TableCell>
                   <TableCell className="font-mono">{client.licensePlate}</TableCell>
                   <TableCell className="hidden sm:table-cell">{client.phone || "—"}</TableCell>
+                  <TableCell>
+                    {client.balance > 0 ? (
+                      <span className="text-red-600 font-medium">
+                        Долг {formatCurrency(client.balance)}
+                      </span>
+                    ) : client.balance < 0 ? (
+                      <span className="text-blue-600 font-medium">
+                        Предопл. {formatCurrency(Math.abs(client.balance))}
+                      </span>
+                    ) : (
+                      <span className="text-zinc-400">—</span>
+                    )}
+                  </TableCell>
                   <TableCell>{client._count.sales}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">

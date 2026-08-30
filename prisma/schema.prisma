@@ -8,36 +8,85 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  username     String   @unique
-  passwordHash String
-  displayName  String
-  role         String   @default("operator")
-  createdAt    DateTime @default(now())
-  sales        Sale[]
+  id             String          @id @default(cuid())
+  username       String          @unique
+  passwordHash   String
+  displayName    String
+  role           String          @default("operator")
+  createdAt      DateTime        @default(now())
+  sales          Sale[]
+  expenses       Expense[]
+  deletedRecords DeletedRecord[] @relation("DeletedBy")
+}
+
+model AppSettings {
+  id             String @id @default("default")
+  openingBalance Float  @default(0)
 }
 
 model Client {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   carBrand     String
-  licensePlate String
-  phone        String   @default("")
-  notes        String   @default("")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  licensePlate String    @unique
+  phone        String    @default("")
+  notes        String    @default("")
+  balance      Float     @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
   sales        Sale[]
 }
 
 model Sale {
   id           String   @id @default(cuid())
   clientId     String
-  client       Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client       Client   @relation(fields: [clientId], references: [id])
   quantity     Int
   pricePerUnit Float
   totalPrice   Float
+  paymentType  String   @default("paid")
   notes        String   @default("")
   userId       String
   user         User     @relation(fields: [userId], references: [id])
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+model Counterparty {
+  id        String    @id @default(cuid())
+  name      String
+  phone     String    @default("")
+  notes     String    @default("")
+  createdAt DateTime  @default(now())
+  expenses  Expense[]
+}
+
+model ExpenseCategory {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  createdAt DateTime  @default(now())
+  expenses  Expense[]
+}
+
+model Expense {
+  id             String          @id @default(cuid())
+  categoryId     String
+  category       ExpenseCategory @relation(fields: [categoryId], references: [id])
+  counterpartyId String
+  counterparty   Counterparty    @relation(fields: [counterpartyId], references: [id])
+  amount         Float
+  note           String          @default("")
+  userId         String
+  user           User            @relation(fields: [userId], references: [id])
+  createdAt      DateTime        @default(now())
+}
+
+model DeletedRecord {
+  id          String   @id @default(cuid())
+  entityType  String
+  entityId    String
+  label       String
+  data        String
+  deletedAt   DateTime @default(now())
+  deletedById String
+  deletedBy   User     @relation("DeletedBy", fields: [deletedById], references: [id])
 }

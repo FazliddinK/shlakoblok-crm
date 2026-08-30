@@ -10,6 +10,8 @@ import {
   Settings,
   Menu,
   Blocks,
+  Wallet,
+  Trash2,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -18,8 +20,10 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 const navItems = [
   { href: "/", label: "Дашборд", icon: LayoutDashboard },
   { href: "/sales", label: "Продажи", icon: ShoppingCart },
+  { href: "/expenses", label: "Расходы", icon: Wallet },
   { href: "/clients", label: "Клиенты", icon: Users },
   { href: "/reports", label: "Отчёты", icon: BarChart3 },
+  { href: "/deleted", label: "Удалённые", icon: Trash2 },
   { href: "/settings", label: "Настройки", icon: Settings },
 ];
 
