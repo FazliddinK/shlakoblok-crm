@@ -1,0 +1,9 @@
+node_modules
+.next
+.git
+*.md
+!README.md
+prisma/data
+.env
+.env.local
+npm-debug.log*

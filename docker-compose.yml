@@ -1,0 +1,16 @@
+services:
+  shlakoblok-crm:
+    build: .
+    container_name: shlakoblok-crm
+    ports:
+      - "43123:43123"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "file:/app/prisma/data/shlakoblok.db"
+    volumes:
+      - shlakoblok-data:/app/prisma/data
+    restart: unless-stopped
+
+volumes:
+  shlakoblok-data:
