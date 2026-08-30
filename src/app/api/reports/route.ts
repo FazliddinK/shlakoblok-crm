@@ -1,34 +1,49 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
+import { buildDateFilter } from "@/lib/dates";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
 
   const period = request.nextUrl.searchParams.get("period") ?? "month";
+  const fromParam = request.nextUrl.searchParams.get("from");
+  const toParam = request.nextUrl.searchParams.get("to");
 
-  const now = new Date();
   let from: Date;
+  let to: Date = new Date();
+  to.setHours(23, 59, 59, 999);
 
-  switch (period) {
-    case "today":
-      from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      break;
-    case "week":
-      from = new Date(now);
-      from.setDate(from.getDate() - 7);
-      break;
-    case "year":
-      from = new Date(now.getFullYear(), 0, 1);
-      break;
-    case "month":
-    default:
-      from = new Date(now.getFullYear(), now.getMonth(), 1);
+  if (fromParam && toParam) {
+    from = new Date(fromParam);
+    to = new Date(`${toParam}T23:59:59.999`);
+  } else {
+    const now = new Date();
+    switch (period) {
+      case "today":
+        from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        break;
+      case "week":
+        from = new Date(now);
+        from.setDate(from.getDate() - 7);
+        break;
+      case "year":
+        from = new Date(now.getFullYear(), 0, 1);
+        break;
+      case "month":
+      default:
+        from = new Date(now.getFullYear(), now.getMonth(), 1);
+    }
   }
 
+  const dateFilter = buildDateFilter(
+    from.toISOString().slice(0, 10),
+    to.toISOString().slice(0, 10),
+  );
+
   const sales = await prisma.sale.findMany({
-    where: { createdAt: { gte: from } },
+    where: dateFilter,
     include: { client: true },
     orderBy: { createdAt: "desc" },
   });
@@ -69,6 +84,12 @@ export async function GET(request: NextRequest) {
     .sort((a, b) => b.total - a.total)
     .slice(0, 10);
 
+  const expenses = await prisma.expense.findMany({
+    where: dateFilter,
+    include: { category: true },
+  });
+  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+
   const [totalClients, totalSalesAllTime] = await Promise.all([
     prisma.client.count(),
     prisma.sale.count(),
@@ -76,6 +97,8 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     period,
+    from: from.toISOString().slice(0, 10),
+    to: to.toISOString().slice(0, 10),
     summary: {
       totalRevenue,
       totalQuantity,
@@ -83,6 +106,8 @@ export async function GET(request: NextRequest) {
       avgCheck,
       totalClients,
       totalSalesAllTime,
+      totalExpenses,
+      expensesCount: expenses.length,
     },
     dailyStats,
     topClients,

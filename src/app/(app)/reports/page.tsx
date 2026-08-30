@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { DateRangeFilter } from "@/components/ui/date-range-filter";
 import {
   Select,
   SelectContent,
@@ -12,9 +13,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatCurrency, formatDateTime } from "@/lib/labels";
+import { todayDateString } from "@/lib/dates";
 
 interface ReportData {
   period: string;
+  from: string;
+  to: string;
   summary: {
     totalRevenue: number;
     totalQuantity: number;
@@ -22,6 +26,8 @@ interface ReportData {
     avgCheck: number;
     totalClients: number;
     totalSalesAllTime: number;
+    totalExpenses: number;
+    expensesCount: number;
   };
   dailyStats: { date: string; revenue: number; quantity: number; count: number }[];
   topClients: { carBrand: string; licensePlate: string; total: number; count: number }[];
@@ -39,29 +45,48 @@ const PERIOD_LABELS: Record<string, string> = {
   week: "Неделя",
   month: "Месяц",
   year: "Год",
+  custom: "Период",
 };
 
 export default function ReportsPage() {
   const [period, setPeriod] = useState("month");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const [data, setData] = useState<ReportData | null>(null);
   const [userName, setUserName] = useState("");
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
+    const params = new URLSearchParams({ period });
+    if (period === "custom" && from && to) {
+      params.set("from", from);
+      params.set("to", to);
+    }
     const [reportRes, meRes] = await Promise.all([
-      fetch(`/api/reports?period=${period}`),
+      fetch(`/api/reports?${params}`),
       fetch("/api/auth/me"),
     ]);
     setData(await reportRes.json());
     const me = await meRes.json();
     setUserName(me.user?.displayName ?? "");
     setLoading(false);
-  }, [period]);
+  }, [period, from, to]);
 
   useEffect(() => {
+    if (period === "custom" && (!from || !to)) return;
     load();
-  }, [load]);
+  }, [load, period, from, to]);
+
+  function handlePeriodChange(value: string) {
+    setPeriod(value);
+    if (value === "custom") {
+      const today = todayDateString();
+      const monthStart = today.slice(0, 8) + "01";
+      setFrom(monthStart);
+      setTo(today);
+    }
+  }
 
   if (loading || !data) {
     return <div className="flex h-64 items-center justify-center text-zinc-500">Загрузка...</div>;
@@ -73,19 +98,33 @@ export default function ReportsPage() {
     <div>
       <PageHeader
         title="Отчёты и аналитика"
-        description="Статистика продаж шлакоблоков"
+        description={
+          period === "custom"
+            ? `Период: ${from} — ${to}`
+            : `Период: ${PERIOD_LABELS[period] ?? period}`
+        }
         userName={userName}
         action={
-          <Select value={period} onValueChange={(v) => v && setPeriod(v)}>
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(PERIOD_LABELS).map(([k, v]) => (
-                <SelectItem key={k} value={k}>{v}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            {period === "custom" && (
+              <DateRangeFilter
+                from={from}
+                to={to}
+                onFromChange={setFrom}
+                onToChange={setTo}
+              />
+            )}
+            <Select value={period} onValueChange={(v) => v && handlePeriodChange(v)}>
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(PERIOD_LABELS).map(([k, v]) => (
+                  <SelectItem key={k} value={k}>{v}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         }
       />
 
@@ -99,7 +138,9 @@ export default function ReportsPage() {
         <StatCard title="Средний чек" value={formatCurrency(data.summary.avgCheck)} />
       </div>
 
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard title="Расходы за период" value={formatCurrency(data.summary.totalExpenses)} small />
+        <StatCard title="Кол-во расходов" value={String(data.summary.expensesCount)} small />
         <StatCard title="Всего клиентов" value={String(data.summary.totalClients)} small />
         <StatCard title="Всего продаж" value={String(data.summary.totalSalesAllTime)} small />
       </div>

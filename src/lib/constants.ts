@@ -18,3 +18,5 @@ export const PAYMENT_TYPE_LABELS: Record<string, string> = {
   debt: "В долг",
   prepayment: "Предоплата",
 };
+
+export const CREATOR_INFO = 'ООО "Qurilish resurslari"';

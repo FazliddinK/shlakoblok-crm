@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
-import { applySaleEffects, archiveRecord, reverseSaleEffects } from "@/lib/finance";
+import { applySaleEffects } from "@/lib/finance";
+import { buildDateFilter, resolveDateRange } from "@/lib/dates";
 import { sendTelegramMessage, formatTelegramMessage, operatorFromSession } from "@/lib/telegram";
 import { PAYMENT_TYPE_LABELS } from "@/lib/constants";
 
@@ -10,22 +11,17 @@ export async function GET(request: NextRequest) {
   if ("error" in auth) return auth.error;
 
   const search = request.nextUrl.searchParams.get("search") ?? "";
-  const from = request.nextUrl.searchParams.get("from");
-  const to = request.nextUrl.searchParams.get("to");
+  const fromParam = request.nextUrl.searchParams.get("from");
+  const toParam = request.nextUrl.searchParams.get("to");
+  const allTime = request.nextUrl.searchParams.get("all") === "1";
 
-  const dateFilter =
-    from || to
-      ? {
-          createdAt: {
-            ...(from ? { gte: new Date(from) } : {}),
-            ...(to ? { lte: new Date(to + "T23:59:59") } : {}),
-          },
-        }
-      : {};
+  const { from, to } = allTime
+    ? { from: fromParam, to: toParam }
+    : resolveDateRange(fromParam, toParam, true);
 
   const sales = await prisma.sale.findMany({
     where: {
-      ...dateFilter,
+      ...buildDateFilter(from, to),
       ...(search
         ? {
             OR: [
@@ -38,11 +34,22 @@ export async function GET(request: NextRequest) {
     include: {
       client: true,
       user: { select: { displayName: true } },
+      debtPayments: {
+        include: { user: { select: { displayName: true } } },
+        orderBy: { createdAt: "desc" },
+      },
     },
     orderBy: { createdAt: "desc" },
   });
 
-  return NextResponse.json(sales);
+  const enriched = sales.map((sale) => {
+    const paid = sale.debtPayments.reduce((sum, p) => sum + p.amount, 0);
+    const debtRemaining =
+      sale.paymentType === "debt" ? Math.max(0, sale.totalPrice - paid) : 0;
+    return { ...sale, debtPaid: paid, debtRemaining };
+  });
+
+  return NextResponse.json(enriched);
 }
 
 export async function POST(request: NextRequest) {
@@ -115,7 +122,11 @@ export async function POST(request: NextRequest) {
       notes: notes?.trim() ?? "",
       userId: auth.session.userId,
     },
-    include: { client: true, user: { select: { displayName: true } } },
+    include: {
+      client: true,
+      user: { select: { displayName: true } },
+      debtPayments: true,
+    },
   });
 
   await applySaleEffects(sale);
@@ -132,5 +143,8 @@ export async function POST(request: NextRequest) {
     ),
   );
 
-  return NextResponse.json(sale, { status: 201 });
+  return NextResponse.json(
+    { ...sale, debtPaid: 0, debtRemaining: payType === "debt" ? total : 0 },
+    { status: 201 },
+  );
 }

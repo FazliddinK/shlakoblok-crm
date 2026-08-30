@@ -2,14 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { getFinanceSummary, archiveRecord } from "@/lib/finance";
+import { buildDateFilter, resolveDateRange } from "@/lib/dates";
 import { sendTelegramMessage, formatTelegramMessage, operatorFromSession } from "@/lib/telegram";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
 
+  const fromParam = request.nextUrl.searchParams.get("from");
+  const toParam = request.nextUrl.searchParams.get("to");
+  const allTime = request.nextUrl.searchParams.get("all") === "1";
+
+  const { from, to } = allTime
+    ? { from: fromParam, to: toParam }
+    : resolveDateRange(fromParam, toParam, true);
+
   const [expenses, summary] = await Promise.all([
     prisma.expense.findMany({
+      where: buildDateFilter(from, to),
       include: {
         category: true,
         counterparty: true,
@@ -20,7 +30,7 @@ export async function GET() {
     getFinanceSummary(),
   ]);
 
-  return NextResponse.json({ expenses, summary });
+  return NextResponse.json({ expenses, summary, from, to });
 }
 
 export async function POST(request: NextRequest) {

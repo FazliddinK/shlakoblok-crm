@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Trash2, KeyRound, UserPlus, Shield, Wallet } from "lucide-react";
+import { Plus, Trash2, KeyRound, UserPlus, Shield, Wallet, FileDown } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/labels";
+import { DateRangeFilter } from "@/components/ui/date-range-filter";
+import { todayDateString } from "@/lib/dates";
 import {
   Dialog,
   DialogContent,
@@ -73,6 +75,10 @@ export default function SettingsPage() {
   const [financeError, setFinanceError] = useState("");
   const [financeLoading, setFinanceLoading] = useState(false);
 
+  const [exportFrom, setExportFrom] = useState("");
+  const [exportTo, setExportTo] = useState("");
+  const [exportLoading, setExportLoading] = useState(false);
+
   const load = useCallback(async () => {
     const [meRes, financeRes] = await Promise.all([
       fetch("/api/auth/me"),
@@ -96,6 +102,9 @@ export default function SettingsPage() {
     }
 
     setLoading(false);
+    const today = todayDateString();
+    setExportFrom(today.slice(0, 8) + "01");
+    setExportTo(today);
   }, []);
 
   useEffect(() => {
@@ -196,6 +205,28 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleExport(allTime: boolean) {
+    setExportLoading(true);
+    const params = new URLSearchParams();
+    if (!allTime && exportFrom && exportTo) {
+      params.set("from", exportFrom);
+      params.set("to", exportTo);
+    }
+    const res = await fetch(`/api/export?${params}`);
+    if (res.ok) {
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download =
+        res.headers.get("Content-Disposition")?.match(/filename="(.+)"/)?.[1] ??
+        "shlakoblok_export.xlsx";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+    setExportLoading(false);
+  }
+
   async function handleDeleteUser(id: string, name: string) {
     if (!confirm(`Удалить пользователя ${name}?`)) return;
 
@@ -217,7 +248,7 @@ export default function SettingsPage() {
     <div>
       <PageHeader
         title="Настройки"
-        description="Пароль, касса и пользователи"
+        description="Пароль, касса, экспорт и пользователи"
         userName={userName}
       />
 
@@ -244,6 +275,44 @@ export default function SettingsPage() {
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <FileDown className="h-4 w-4 text-orange-500" />
+              Экспорт в Excel
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-zinc-500">
+              Скачать все данные программы: продажи, расходы, клиенты, погашения долга,
+              пользователи и сводку.
+            </p>
+            <DateRangeFilter
+              from={exportFrom}
+              to={exportTo}
+              onFromChange={setExportFrom}
+              onToChange={setExportTo}
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={() => handleExport(false)}
+                disabled={exportLoading || !exportFrom || !exportTo}
+                className="bg-orange-500 hover:bg-orange-600"
+              >
+                <FileDown className="mr-2 h-4 w-4" />
+                Скачать за период
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => handleExport(true)}
+                disabled={exportLoading}
+              >
+                Скачать всё
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         {isAdmin && (
           <Card>
             <CardHeader>
@@ -256,7 +325,7 @@ export default function SettingsPage() {
               <form onSubmit={handleSaveOpeningBalance} className="space-y-4">
                 <p className="text-sm text-zinc-500">
                   Сумма в кассе на начало работы. Текущий остаток считается так:
-                  начальный остаток + оплаченные продажи и предоплаты − расходы.
+                  начальный остаток + оплаченные продажи, предоплаты и погашения долга − расходы.
                 </p>
                 {cashBalance !== null && (
                   <p className="rounded-lg bg-zinc-50 px-3 py-2 text-sm">

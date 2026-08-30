@@ -25,7 +25,11 @@ export async function middleware(request: NextRequest) {
   }
 
   if (session?.value && pathname === "/login") {
-    return NextResponse.redirect(new URL("/", request.url));
+    return NextResponse.redirect(new URL("/sales", request.url));
+  }
+
+  if (session?.value && pathname === "/") {
+    return NextResponse.redirect(new URL("/sales", request.url));
   }
 
   return NextResponse.next();

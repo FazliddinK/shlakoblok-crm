@@ -17,6 +17,8 @@ model User {
   sales          Sale[]
   expenses       Expense[]
   deletedRecords DeletedRecord[] @relation("DeletedBy")
+  changeRecords  ChangeRecord[]  @relation("ChangedBy")
+  debtPayments   DebtPayment[]
 }
 
 model AppSettings {
@@ -37,18 +39,30 @@ model Client {
 }
 
 model Sale {
-  id           String   @id @default(cuid())
+  id           String        @id @default(cuid())
   clientId     String
-  client       Client   @relation(fields: [clientId], references: [id])
+  client       Client        @relation(fields: [clientId], references: [id])
   quantity     Int
   pricePerUnit Float
   totalPrice   Float
-  paymentType  String   @default("paid")
-  notes        String   @default("")
+  paymentType  String        @default("paid")
+  notes        String        @default("")
   userId       String
-  user         User     @relation(fields: [userId], references: [id])
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  user         User          @relation(fields: [userId], references: [id])
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  debtPayments DebtPayment[]
+}
+
+model DebtPayment {
+  id        String   @id @default(cuid())
+  saleId    String
+  sale      Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  amount    Float
+  note      String   @default("")
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
 }
 
 model Counterparty {
@@ -89,4 +103,16 @@ model DeletedRecord {
   deletedAt   DateTime @default(now())
   deletedById String
   deletedBy   User     @relation("DeletedBy", fields: [deletedById], references: [id])
+}
+
+model ChangeRecord {
+  id          String   @id @default(cuid())
+  entityType  String
+  entityId    String
+  label       String
+  oldData     String
+  newData     String
+  changedAt   DateTime @default(now())
+  changedById String
+  changedBy   User     @relation("ChangedBy", fields: [changedById], references: [id])
 }

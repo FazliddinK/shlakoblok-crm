@@ -4,8 +4,11 @@ import { requireAuth } from "@/lib/auth";
 import {
   applySaleEffects,
   archiveRecord,
+  getSaleDebtPaid,
+  reverseDebtPaymentsForSale,
   reverseSaleEffects,
 } from "@/lib/finance";
+import { describeChanges, logChange } from "@/lib/audit";
 import { sendTelegramMessage, formatTelegramMessage, operatorFromSession } from "@/lib/telegram";
 import { PAYMENT_TYPE_LABELS } from "@/lib/constants";
 
@@ -18,14 +21,26 @@ export async function GET(_request: NextRequest, { params }: Params) {
   const { id } = await params;
   const sale = await prisma.sale.findUnique({
     where: { id },
-    include: { client: true, user: { select: { displayName: true } } },
+    include: {
+      client: true,
+      user: { select: { displayName: true } },
+      debtPayments: {
+        include: { user: { select: { displayName: true } } },
+        orderBy: { createdAt: "desc" },
+      },
+    },
   });
 
   if (!sale) {
     return NextResponse.json({ error: "Продажа не найдена" }, { status: 404 });
   }
 
-  return NextResponse.json(sale);
+  const paid = await getSaleDebtPaid(sale.id);
+  return NextResponse.json({
+    ...sale,
+    debtPaid: paid,
+    debtRemaining: sale.paymentType === "debt" ? Math.max(0, sale.totalPrice - paid) : 0,
+  });
 }
 
 export async function PUT(request: NextRequest, { params }: Params) {
@@ -33,7 +48,10 @@ export async function PUT(request: NextRequest, { params }: Params) {
   if ("error" in auth) return auth.error;
 
   const { id } = await params;
-  const existing = await prisma.sale.findUnique({ where: { id } });
+  const existing = await prisma.sale.findUnique({
+    where: { id },
+    include: { client: true },
+  });
   if (!existing) {
     return NextResponse.json({ error: "Продажа не найдена" }, { status: 404 });
   }
@@ -43,18 +61,46 @@ export async function PUT(request: NextRequest, { params }: Params) {
   const payType =
     paymentType === "debt" || paymentType === "prepayment" ? paymentType : "paid";
 
+  const newTotal = Number(totalPrice);
+  const paid = await getSaleDebtPaid(id);
+  if (payType === "debt" && paid > newTotal) {
+    return NextResponse.json(
+      { error: "Сумма меньше уже погашенного долга" },
+      { status: 400 },
+    );
+  }
+
+  const newData = {
+    quantity: Number(quantity),
+    pricePerUnit: Number(pricePerUnit),
+    totalPrice: newTotal,
+    paymentType: payType,
+    notes: notes?.trim() ?? "",
+  };
+
+  await logChange(
+    "sale",
+    existing.id,
+    `${existing.client.licensePlate} — ${describeChanges("sale", existing as never, newData)}`,
+    existing,
+    newData,
+    auth.session.userId,
+  );
+
+  if (existing.paymentType === "debt" && payType !== "debt") {
+    await reverseDebtPaymentsForSale(existing.id, existing.clientId);
+  }
+
   await reverseSaleEffects(existing);
 
   const sale = await prisma.sale.update({
     where: { id },
-    data: {
-      quantity: Number(quantity),
-      pricePerUnit: Number(pricePerUnit),
-      totalPrice: Number(totalPrice),
-      paymentType: payType,
-      notes: notes?.trim() ?? "",
+    data: newData,
+    include: {
+      client: true,
+      user: { select: { displayName: true } },
+      debtPayments: true,
     },
-    include: { client: true, user: { select: { displayName: true } } },
   });
 
   await applySaleEffects(sale);
@@ -70,7 +116,12 @@ export async function PUT(request: NextRequest, { params }: Params) {
     ),
   );
 
-  return NextResponse.json(sale);
+  const debtPaid = await getSaleDebtPaid(sale.id);
+  return NextResponse.json({
+    ...sale,
+    debtPaid,
+    debtRemaining: sale.paymentType === "debt" ? Math.max(0, sale.totalPrice - debtPaid) : 0,
+  });
 }
 
 export async function DELETE(_request: NextRequest, { params }: Params) {
@@ -87,6 +138,7 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Продажа не найдена" }, { status: 404 });
   }
 
+  await reverseDebtPaymentsForSale(sale.id, sale.clientId);
   await reverseSaleEffects(sale);
 
   await archiveRecord(

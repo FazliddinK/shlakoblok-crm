@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { archiveRecord } from "@/lib/finance";
+import { describeChanges, logChange } from "@/lib/audit";
 import { sendTelegramMessage, formatTelegramMessage, operatorFromSession } from "@/lib/telegram";
 
 type Params = { params: Promise<{ id: string }> };
@@ -28,17 +29,33 @@ export async function PUT(request: NextRequest, { params }: Params) {
   if ("error" in auth) return auth.error;
 
   const { id } = await params;
+  const existing = await prisma.client.findUnique({ where: { id } });
+  if (!existing) {
+    return NextResponse.json({ error: "Клиент не найден" }, { status: 404 });
+  }
+
   const body = await request.json();
   const { carBrand, licensePlate, phone, notes } = body;
 
+  const newData = {
+    carBrand: carBrand?.trim(),
+    licensePlate: licensePlate?.trim().toUpperCase(),
+    phone: phone?.trim() ?? "",
+    notes: notes?.trim() ?? "",
+  };
+
+  await logChange(
+    "client",
+    existing.id,
+    `${existing.licensePlate} — ${describeChanges("client", existing as never, newData)}`,
+    existing,
+    newData,
+    auth.session.userId,
+  );
+
   const client = await prisma.client.update({
     where: { id },
-    data: {
-      carBrand: carBrand?.trim(),
-      licensePlate: licensePlate?.trim().toUpperCase(),
-      phone: phone?.trim() ?? "",
-      notes: notes?.trim() ?? "",
-    },
+    data: newData,
   });
 
   await sendTelegramMessage(

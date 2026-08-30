@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { DateRangeFilter } from "@/components/ui/date-range-filter";
+import { todayDateString } from "@/lib/dates";
 import {
   Dialog,
   DialogContent,
@@ -53,6 +55,8 @@ export default function ExpensesPage() {
   const [counterparties, setCounterparties] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [from, setFrom] = useState(todayDateString());
+  const [to, setTo] = useState(todayDateString());
   const [form, setForm] = useState({
     categoryName: "",
     counterpartyName: "",
@@ -61,8 +65,10 @@ export default function ExpensesPage() {
   });
 
   const load = useCallback(async () => {
+    setLoading(true);
+    const params = new URLSearchParams({ from, to });
     const [expRes, catRes, cpRes, meRes] = await Promise.all([
-      fetch("/api/expenses"),
+      fetch(`/api/expenses?${params}`),
       fetch("/api/expense-categories"),
       fetch("/api/counterparties"),
       fetch("/api/auth/me"),
@@ -77,11 +83,17 @@ export default function ExpensesPage() {
     const me = await meRes.json();
     setUserName(me.user?.displayName ?? "");
     setLoading(false);
-  }, []);
+  }, [from, to]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  function setToday() {
+    const today = todayDateString();
+    setFrom(today);
+    setTo(today);
+  }
 
   async function handleSave() {
     const res = await fetch("/api/expenses", {
@@ -105,6 +117,8 @@ export default function ExpensesPage() {
   if (loading || !summary) {
     return <div className="flex h-64 items-center justify-center text-zinc-500">Загрузка...</div>;
   }
+
+  const isToday = from === to && from === todayDateString();
 
   return (
     <div>
@@ -181,12 +195,25 @@ export default function ExpensesPage() {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Журнал расходов</CardTitle>
+        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <CardTitle className="text-base">
+            Журнал расходов
+            {isToday && (
+              <span className="ml-2 text-sm font-normal text-zinc-500">(сегодня)</span>
+            )}
+          </CardTitle>
+          <DateRangeFilter
+            from={from}
+            to={to}
+            onFromChange={setFrom}
+            onToChange={setTo}
+            showTodayButton
+            onToday={setToday}
+          />
         </CardHeader>
         <CardContent>
           {expenses.length === 0 ? (
-            <p className="text-sm text-zinc-500">Расходов пока нет</p>
+            <p className="text-sm text-zinc-500">Расходов за выбранный период нет</p>
           ) : (
             <Table>
               <TableHeader>

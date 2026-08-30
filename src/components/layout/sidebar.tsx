@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  LayoutDashboard,
   Users,
   ShoppingCart,
   BarChart3,
@@ -11,19 +10,18 @@ import {
   Menu,
   Blocks,
   Wallet,
-  Trash2,
+  History,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 const navItems = [
-  { href: "/", label: "Дашборд", icon: LayoutDashboard },
   { href: "/sales", label: "Продажи", icon: ShoppingCart },
   { href: "/expenses", label: "Расходы", icon: Wallet },
   { href: "/clients", label: "Клиенты", icon: Users },
   { href: "/reports", label: "Отчёты", icon: BarChart3 },
-  { href: "/deleted", label: "Удалённые", icon: Trash2 },
+  { href: "/deleted", label: "Изменения и удалённые", icon: History },
   { href: "/settings", label: "Настройки", icon: Settings },
 ];
 
@@ -33,7 +31,7 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <nav className="flex flex-col gap-1">
       {navItems.map(({ href, label, icon: Icon }) => {
-        const active = pathname === href;
+        const active = pathname === href || pathname.startsWith(`${href}/`);
         return (
           <Link
             key={href}

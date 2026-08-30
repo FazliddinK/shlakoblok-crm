@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAdmin, requireAuth } from "@/lib/auth";
 import { applySaleEffects } from "@/lib/finance";
+import { rollbackChange } from "@/lib/audit";
 import { sendTelegramMessage, formatTelegramMessage, operatorFromSession } from "@/lib/telegram";
 import type { EntityType } from "@/lib/constants";
 
@@ -9,19 +10,45 @@ export async function GET() {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
 
-  const records = await prisma.deletedRecord.findMany({
-    include: { deletedBy: { select: { displayName: true, username: true } } },
-    orderBy: { deletedAt: "desc" },
-  });
+  const [deleted, changes] = await Promise.all([
+    prisma.deletedRecord.findMany({
+      include: { deletedBy: { select: { displayName: true, username: true } } },
+      orderBy: { deletedAt: "desc" },
+    }),
+    prisma.changeRecord.findMany({
+      include: { changedBy: { select: { displayName: true, username: true } } },
+      orderBy: { changedAt: "desc" },
+    }),
+  ]);
 
-  return NextResponse.json(records);
+  return NextResponse.json({ deleted, changes });
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAuth();
+  const auth = await requireAdmin();
   if ("error" in auth) return auth.error;
 
-  const { id, action } = await request.json();
+  const { id, action, type } = await request.json();
+
+  if (action === "restore" && type === "change") {
+    const record = await prisma.changeRecord.findUnique({ where: { id } });
+    if (!record) {
+      return NextResponse.json({ error: "Запись не найдена" }, { status: 404 });
+    }
+
+    await rollbackChange(id);
+
+    await sendTelegramMessage(
+      formatTelegramMessage(
+        "изменение",
+        "Откат изменения",
+        `↩️ ${record.label}`,
+        operatorFromSession(auth.session),
+      ),
+    );
+
+    return NextResponse.json({ ok: true });
+  }
 
   if (action === "restore") {
     const record = await prisma.deletedRecord.findUnique({ where: { id } });
