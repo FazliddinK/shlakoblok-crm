@@ -182,5 +182,18 @@ async function restoreEntity(entityType: EntityType, data: Record<string, unknow
         },
       });
       break;
+    case "goods_delivery":
+      await prisma.goodsDelivery.create({
+        data: {
+          id: data.id as string,
+          saleId: data.saleId as string,
+          quantity: data.quantity as number,
+          licensePlate: data.licensePlate as string,
+          note: (data.note as string) ?? "",
+          userId: data.userId as string,
+          createdAt: new Date(data.createdAt as string),
+        },
+      });
+      break;
   }
 }

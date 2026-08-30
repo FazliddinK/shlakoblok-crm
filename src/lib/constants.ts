@@ -3,7 +3,8 @@ export type EntityType =
   | "sale"
   | "expense"
   | "counterparty"
-  | "expense_category";
+  | "expense_category"
+  | "goods_delivery";
 
 export const ENTITY_LABELS: Record<EntityType, string> = {
   client: "Клиент",
@@ -11,6 +12,7 @@ export const ENTITY_LABELS: Record<EntityType, string> = {
   expense: "Расход",
   counterparty: "Контрагент",
   expense_category: "Категория расходов",
+  goods_delivery: "Выдача товара",
 };
 
 export const PAYMENT_TYPE_LABELS: Record<string, string> = {
@@ -19,4 +21,17 @@ export const PAYMENT_TYPE_LABELS: Record<string, string> = {
   prepayment: "Предоплата",
 };
 
+export const ROLE_LABELS: Record<string, string> = {
+  admin: "Администратор",
+  operator: "Оператор",
+};
+
 export const CREATOR_INFO = 'ООО "Qurilish resurslari"';
+
+export const SALES_PERIOD_LABELS: Record<string, string> = {
+  today: "Сегодня",
+  yesterday: "Вчера",
+  week: "Текущая неделя",
+  month: "Текущий месяц",
+  custom: "Произвольный период",
+};

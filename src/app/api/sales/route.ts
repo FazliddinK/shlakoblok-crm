@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
-import { applySaleEffects } from "@/lib/finance";
-import { buildDateFilter, resolveDateRange } from "@/lib/dates";
+import {
+  applySaleEffects,
+  enrichSaleDelivery,
+  getSaleDebtPaid,
+  saleInclude,
+} from "@/lib/finance";
+import { buildDateFilter, resolveSalesPeriod } from "@/lib/dates";
 import { sendTelegramMessage, formatTelegramMessage, operatorFromSession } from "@/lib/telegram";
 import { PAYMENT_TYPE_LABELS } from "@/lib/constants";
 
@@ -11,17 +16,16 @@ export async function GET(request: NextRequest) {
   if ("error" in auth) return auth.error;
 
   const search = request.nextUrl.searchParams.get("search") ?? "";
+  const period = request.nextUrl.searchParams.get("period") ?? "today";
   const fromParam = request.nextUrl.searchParams.get("from");
   const toParam = request.nextUrl.searchParams.get("to");
-  const allTime = request.nextUrl.searchParams.get("all") === "1";
+  const pendingOnly = request.nextUrl.searchParams.get("pending") === "1";
 
-  const { from, to } = allTime
-    ? { from: fromParam, to: toParam }
-    : resolveDateRange(fromParam, toParam, true);
+  const { from, to, label } = resolveSalesPeriod(period, fromParam, toParam);
 
   const sales = await prisma.sale.findMany({
     where: {
-      ...buildDateFilter(from, to),
+      ...(pendingOnly ? {} : buildDateFilter(from, to)),
       ...(search
         ? {
             OR: [
@@ -31,25 +35,24 @@ export async function GET(request: NextRequest) {
           }
         : {}),
     },
-    include: {
-      client: true,
-      user: { select: { displayName: true } },
-      debtPayments: {
-        include: { user: { select: { displayName: true } } },
-        orderBy: { createdAt: "desc" },
-      },
-    },
+    include: saleInclude,
     orderBy: { createdAt: "desc" },
   });
 
-  const enriched = sales.map((sale) => {
-    const paid = sale.debtPayments.reduce((sum, p) => sum + p.amount, 0);
-    const debtRemaining =
-      sale.paymentType === "debt" ? Math.max(0, sale.totalPrice - paid) : 0;
-    return { ...sale, debtPaid: paid, debtRemaining };
-  });
+  const enriched = sales
+    .map((sale) => {
+      const paid = sale.debtPayments.reduce((sum, p) => sum + p.amount, 0);
+      const debtRemaining =
+        sale.paymentType === "debt" ? Math.max(0, sale.totalPrice - paid) : 0;
+      return enrichSaleDelivery({
+        ...sale,
+        debtPaid: paid,
+        debtRemaining,
+      });
+    })
+    .filter((sale) => (pendingOnly ? sale.remainingQuantity > 0 : true));
 
-  return NextResponse.json(enriched);
+  return NextResponse.json({ sales: enriched, period, from, to, periodLabel: label });
 }
 
 export async function POST(request: NextRequest) {
@@ -67,6 +70,8 @@ export async function POST(request: NextRequest) {
     licensePlate,
     phone,
     paymentType,
+    initialDeliveryQuantity,
+    initialDeliveryPlate,
   } = body;
 
   let resolvedClientId = clientId;
@@ -112,6 +117,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Укажите количество и цену" }, { status: 400 });
   }
 
+  const client = await prisma.client.findUnique({ where: { id: resolvedClientId } });
+  if (!client) {
+    return NextResponse.json({ error: "Клиент не найден" }, { status: 404 });
+  }
+
   const sale = await prisma.sale.create({
     data: {
       clientId: resolvedClientId,
@@ -122,29 +132,63 @@ export async function POST(request: NextRequest) {
       notes: notes?.trim() ?? "",
       userId: auth.session.userId,
     },
-    include: {
-      client: true,
-      user: { select: { displayName: true } },
-      debtPayments: true,
-    },
+    include: saleInclude,
   });
 
   await applySaleEffects(sale);
+
+  if (payType === "paid") {
+    await prisma.goodsDelivery.create({
+      data: {
+        saleId: sale.id,
+        quantity: qty,
+        licensePlate: client.licensePlate,
+        userId: auth.session.userId,
+      },
+    });
+  } else if (payType === "prepayment") {
+    const initialQty = Number(initialDeliveryQuantity) || 0;
+    if (initialQty > 0) {
+      if (initialQty > qty) {
+        return NextResponse.json(
+          { error: "Нельзя выдать больше, чем куплено" },
+          { status: 400 },
+        );
+      }
+      await prisma.goodsDelivery.create({
+        data: {
+          saleId: sale.id,
+          quantity: initialQty,
+          licensePlate: (initialDeliveryPlate || client.licensePlate).trim().toUpperCase(),
+          userId: auth.session.userId,
+        },
+      });
+    }
+  }
+
+  const fullSale = await prisma.sale.findUnique({
+    where: { id: sale.id },
+    include: saleInclude,
+  });
 
   await sendTelegramMessage(
     formatTelegramMessage(
       "создание",
       "Продажа шлакоблоков",
-      `🚗 ${sale.client.carBrand} (${sale.client.licensePlate})\n` +
-        `📦 ${sale.quantity} шт × ${sale.pricePerUnit} сум\n` +
-        `💵 Итого: ${sale.totalPrice} сум\n` +
+      `🚗 ${fullSale!.client.carBrand} (${fullSale!.client.licensePlate})\n` +
+        `📦 ${fullSale!.quantity} шт × ${fullSale!.pricePerUnit} сум\n` +
+        `💵 Итого: ${fullSale!.totalPrice} сум\n` +
         `💳 ${PAYMENT_TYPE_LABELS[payType]}`,
       operatorFromSession(auth.session),
     ),
   );
 
-  return NextResponse.json(
-    { ...sale, debtPaid: 0, debtRemaining: payType === "debt" ? total : 0 },
-    { status: 201 },
-  );
+  const paid = await getSaleDebtPaid(sale.id);
+  const result = enrichSaleDelivery({
+    ...fullSale!,
+    debtPaid: paid,
+    debtRemaining: payType === "debt" ? total : 0,
+  });
+
+  return NextResponse.json(result, { status: 201 });
 }

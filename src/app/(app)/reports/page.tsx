@@ -5,13 +5,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DateRangeFilter } from "@/components/ui/date-range-filter";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { LabeledSelect } from "@/components/ui/labeled-select";
 import { formatCurrency, formatDateTime } from "@/lib/labels";
 import { todayDateString } from "@/lib/dates";
 
@@ -114,16 +108,12 @@ export default function ReportsPage() {
                 onToChange={setTo}
               />
             )}
-            <Select value={period} onValueChange={(v) => v && handlePeriodChange(v)}>
-              <SelectTrigger className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(PERIOD_LABELS).map(([k, v]) => (
-                  <SelectItem key={k} value={k}>{v}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <LabeledSelect
+              value={period}
+              onValueChange={(value) => handlePeriodChange(value)}
+              options={Object.entries(PERIOD_LABELS).map(([value, label]) => ({ value, label }))}
+              triggerClassName="w-48"
+            />
           </div>
         }
       />

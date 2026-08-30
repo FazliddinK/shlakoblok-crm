@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import type { EntityType } from "@/lib/constants";
+import { PAYMENT_TYPE_LABELS } from "@/lib/constants";
 import {
   applySaleEffects,
   reverseDebtPaymentsForSale,
@@ -65,6 +66,16 @@ export async function rollbackChange(recordId: string) {
         },
       });
       break;
+    case "goods_delivery":
+      await prisma.goodsDelivery.update({
+        where: { id: record.entityId },
+        data: {
+          quantity: oldData.quantity as number,
+          licensePlate: oldData.licensePlate as string,
+          note: (oldData.note as string) ?? "",
+        },
+      });
+      break;
     default:
       throw new Error("Восстановление этого типа записи не поддерживается");
   }
@@ -82,10 +93,18 @@ export function describeChanges(
     licensePlate: "Гос. номер",
     phone: "Телефон",
     notes: "Примечание",
+    note: "Примечание",
     quantity: "Кол-во",
     pricePerUnit: "Цена/шт",
     totalPrice: "Итого",
     paymentType: "Тип оплаты",
+  };
+
+  const formatValue = (key: string, value: unknown) => {
+    if (key === "paymentType" && typeof value === "string") {
+      return PAYMENT_TYPE_LABELS[value] ?? value;
+    }
+    return value ?? "—";
   };
 
   const parts: string[] = [];
@@ -93,7 +112,7 @@ export function describeChanges(
     const oldVal = oldData[key];
     const newVal = newData[key];
     if (oldVal !== newVal && (oldVal !== undefined || newVal !== undefined)) {
-      parts.push(`${label}: ${oldVal ?? "—"} → ${newVal ?? "—"}`);
+      parts.push(`${label}: ${formatValue(key, oldVal)} → ${formatValue(key, newVal)}`);
     }
   }
 

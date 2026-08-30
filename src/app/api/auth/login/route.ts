@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     const user = await prisma.user.findUnique({ where: { username } });
 
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
-      return NextResponse.json({ error: "Неверный логин или пароль" }, { status: 401 });
+      return NextResponse.json({ error: "Неверный пароль" }, { status: 401 });
     }
 
     const session = await getSession();

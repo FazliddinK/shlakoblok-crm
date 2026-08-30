@@ -18,13 +18,8 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { LabeledSelect } from "@/components/ui/labeled-select";
+import { ROLE_LABELS } from "@/lib/constants";
 import {
   Table,
   TableBody,
@@ -526,18 +521,15 @@ export default function SettingsPage() {
             </div>
             <div className="grid gap-2">
               <Label>Роль</Label>
-              <Select
+              <LabeledSelect
                 value={newUserForm.role}
-                onValueChange={(v) => v && setNewUserForm({ ...newUserForm, role: v })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="operator">Оператор</SelectItem>
-                  <SelectItem value="admin">Администратор</SelectItem>
-                </SelectContent>
-              </Select>
+                onValueChange={(value) => setNewUserForm({ ...newUserForm, role: value })}
+                options={[
+                  { value: "operator", label: ROLE_LABELS.operator },
+                  { value: "admin", label: ROLE_LABELS.admin },
+                ]}
+                triggerClassName="w-full"
+              />
             </div>
           </div>
           <DialogFooter>

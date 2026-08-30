@@ -1,23 +1,53 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Blocks, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { LabeledSelect } from "@/components/ui/labeled-select";
+import { ROLE_LABELS } from "@/lib/constants";
+
+interface LoginUser {
+  id: string;
+  username: string;
+  displayName: string;
+  role: string;
+}
 
 export default function LoginPage() {
   const router = useRouter();
+  const [users, setUsers] = useState<LoginUser[]>([]);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    fetch("/api/auth/users")
+      .then((res) => res.json())
+      .then((data) => setUsers(Array.isArray(data) ? data : []))
+      .catch(() => setUsers([]));
+  }, []);
+
+  const userOptions = users.map((user) => ({
+    value: user.username,
+    label: `${user.displayName}${user.role === "admin" ? ` (${ROLE_LABELS.admin})` : ""}`,
+  }));
+
+  const selectedUser = users.find((user) => user.username === username);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+
+    if (!username) {
+      setError("Выберите пользователя");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -29,11 +59,11 @@ export default function LoginPage() {
 
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Ошибка входа");
+        setError(data.error || "Неверный пароль");
         return;
       }
 
-      router.push("/");
+      router.push("/sales");
       router.refresh();
     } catch {
       setError("Не удалось подключиться к серверу");
@@ -55,14 +85,19 @@ export default function LoginPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="username">Логин</Label>
-              <Input
-                id="username"
+              <Label>Пользователь</Label>
+              <LabeledSelect
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                autoComplete="username"
-                required
+                onValueChange={setUsername}
+                options={userOptions}
+                placeholder="Выберите пользователя"
+                triggerClassName="w-full"
               />
+              {selectedUser && (
+                <p className="text-xs text-zinc-500">
+                  Вход как: <span className="font-medium">{selectedUser.displayName}</span>
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Пароль</Label>
@@ -81,7 +116,7 @@ export default function LoginPage() {
             <Button
               type="submit"
               className="w-full bg-orange-500 hover:bg-orange-600"
-              disabled={loading}
+              disabled={loading || !username}
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Войти"}
             </Button>

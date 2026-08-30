@@ -181,6 +181,39 @@ export async function buildExportWorkbook(from?: string, to?: string) {
   }
   autoWidth(repaySheet);
 
+  const deliveries = await prisma.goodsDelivery.findMany({
+    where: dateFilter,
+    include: {
+      sale: { include: { client: true } },
+      user: { select: { displayName: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const deliveriesSheet = workbook.addWorksheet("Выдачи товара");
+  deliveriesSheet.addRow([
+    "Дата",
+    "Марка",
+    "Гос. номер клиента",
+    "Гос. номер выдачи",
+    "Кол-во",
+    "Примечание",
+    "Оператор",
+  ]);
+  styleHeader(deliveriesSheet.getRow(1));
+  for (const delivery of deliveries) {
+    deliveriesSheet.addRow([
+      new Date(delivery.createdAt).toLocaleString("ru-RU"),
+      delivery.sale.client.carBrand,
+      delivery.sale.client.licensePlate,
+      delivery.licensePlate,
+      delivery.quantity,
+      delivery.note,
+      delivery.user.displayName,
+    ]);
+  }
+  autoWidth(deliveriesSheet);
+
   const usersSheet = workbook.addWorksheet("Пользователи");
   usersSheet.addRow(["Логин", "Имя", "Роль", "Создан"]);
   styleHeader(usersSheet.getRow(1));

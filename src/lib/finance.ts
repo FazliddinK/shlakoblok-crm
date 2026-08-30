@@ -55,6 +55,52 @@ export async function applySaleEffects(sale: {
   }
 }
 
+export type SaleWithDeliveries = {
+  id: string;
+  quantity: number;
+  totalPrice: number;
+  pricePerUnit: number;
+  paymentType: string;
+  goodsDeliveries?: { quantity: number }[];
+  client?: { carBrand: string; licensePlate: string };
+};
+
+export function getDeliveredQuantity(sale: SaleWithDeliveries): number {
+  const delivered =
+    sale.goodsDeliveries?.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
+
+  if (sale.paymentType === "prepayment") {
+    return delivered;
+  }
+
+  if (sale.paymentType === "paid") {
+    return delivered > 0 ? delivered : sale.quantity;
+  }
+
+  return sale.quantity;
+}
+
+export function enrichSaleDelivery<T extends SaleWithDeliveries>(
+  sale: T,
+): T & {
+  deliveredQuantity: number;
+  remainingQuantity: number;
+  paidAmount: number;
+} {
+  const deliveredQuantity = getDeliveredQuantity(sale);
+  const remainingQuantity =
+    sale.paymentType === "prepayment"
+      ? Math.max(0, sale.quantity - deliveredQuantity)
+      : 0;
+
+  return {
+    ...sale,
+    deliveredQuantity,
+    remainingQuantity,
+    paidAmount: sale.totalPrice,
+  };
+}
+
 export async function getSaleDebtPaid(saleId: string): Promise<number> {
   const payments = await prisma.debtPayment.aggregate({
     where: { saleId },
@@ -117,6 +163,15 @@ export async function getFinanceSummary() {
     orderBy: { balance: "desc" },
   });
 
+  const prepaymentSales = await prisma.sale.findMany({
+    where: { paymentType: "prepayment" },
+    include: {
+      client: true,
+      goodsDeliveries: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
   const cashFromSales = sales.reduce((sum, sale) => {
     if (sale.paymentType === "paid" || sale.paymentType === "prepayment") {
       return sum + sale.totalPrice;
@@ -133,6 +188,21 @@ export async function getFinanceSummary() {
   const debtors = clients.filter((c) => c.balance > 0);
   const prepayments = clients.filter((c) => c.balance < 0);
 
+  const pendingGoods = prepaymentSales
+    .map((sale) => enrichSaleDelivery(sale))
+    .filter((sale) => sale.remainingQuantity > 0)
+    .map((sale) => ({
+      saleId: sale.id,
+      carBrand: sale.client.carBrand,
+      licensePlate: sale.client.licensePlate,
+      purchasedQuantity: sale.quantity,
+      deliveredQuantity: sale.deliveredQuantity,
+      remainingQuantity: sale.remainingQuantity,
+      pricePerUnit: sale.pricePerUnit,
+      paidAmount: sale.totalPrice,
+      createdAt: sale.createdAt,
+    }));
+
   return {
     openingBalance: settings.openingBalance,
     cashIncome,
@@ -142,5 +212,19 @@ export async function getFinanceSummary() {
     cashBalance,
     debtors,
     prepayments,
+    pendingGoods,
   };
 }
+
+export const saleInclude = {
+  client: true,
+  user: { select: { displayName: true } },
+  debtPayments: {
+    include: { user: { select: { displayName: true } } },
+    orderBy: { createdAt: "desc" as const },
+  },
+  goodsDeliveries: {
+    include: { user: { select: { displayName: true } } },
+    orderBy: { createdAt: "desc" as const },
+  },
+};

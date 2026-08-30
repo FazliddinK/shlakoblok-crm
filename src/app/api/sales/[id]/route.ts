@@ -4,9 +4,11 @@ import { requireAuth } from "@/lib/auth";
 import {
   applySaleEffects,
   archiveRecord,
+  enrichSaleDelivery,
   getSaleDebtPaid,
   reverseDebtPaymentsForSale,
   reverseSaleEffects,
+  saleInclude,
 } from "@/lib/finance";
 import { describeChanges, logChange } from "@/lib/audit";
 import { sendTelegramMessage, formatTelegramMessage, operatorFromSession } from "@/lib/telegram";
@@ -21,14 +23,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
   const { id } = await params;
   const sale = await prisma.sale.findUnique({
     where: { id },
-    include: {
-      client: true,
-      user: { select: { displayName: true } },
-      debtPayments: {
-        include: { user: { select: { displayName: true } } },
-        orderBy: { createdAt: "desc" },
-      },
-    },
+    include: saleInclude,
   });
 
   if (!sale) {
@@ -36,11 +31,13 @@ export async function GET(_request: NextRequest, { params }: Params) {
   }
 
   const paid = await getSaleDebtPaid(sale.id);
-  return NextResponse.json({
-    ...sale,
-    debtPaid: paid,
-    debtRemaining: sale.paymentType === "debt" ? Math.max(0, sale.totalPrice - paid) : 0,
-  });
+  return NextResponse.json(
+    enrichSaleDelivery({
+      ...sale,
+      debtPaid: paid,
+      debtRemaining: sale.paymentType === "debt" ? Math.max(0, sale.totalPrice - paid) : 0,
+    }),
+  );
 }
 
 export async function PUT(request: NextRequest, { params }: Params) {
@@ -50,7 +47,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
   const { id } = await params;
   const existing = await prisma.sale.findUnique({
     where: { id },
-    include: { client: true },
+    include: { client: true, goodsDeliveries: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "Продажа не найдена" }, { status: 404 });
@@ -70,8 +67,19 @@ export async function PUT(request: NextRequest, { params }: Params) {
     );
   }
 
+  const newQty = Number(quantity);
+  if (payType === "prepayment") {
+    const delivered = existing.goodsDeliveries.reduce((sum, item) => sum + item.quantity, 0);
+    if (newQty < delivered) {
+      return NextResponse.json(
+        { error: `Нельзя уменьшить ниже уже выданного (${delivered} шт)` },
+        { status: 400 },
+      );
+    }
+  }
+
   const newData = {
-    quantity: Number(quantity),
+    quantity: newQty,
     pricePerUnit: Number(pricePerUnit),
     totalPrice: newTotal,
     paymentType: payType,
@@ -96,11 +104,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
   const sale = await prisma.sale.update({
     where: { id },
     data: newData,
-    include: {
-      client: true,
-      user: { select: { displayName: true } },
-      debtPayments: true,
-    },
+    include: saleInclude,
   });
 
   await applySaleEffects(sale);
@@ -117,11 +121,13 @@ export async function PUT(request: NextRequest, { params }: Params) {
   );
 
   const debtPaid = await getSaleDebtPaid(sale.id);
-  return NextResponse.json({
-    ...sale,
-    debtPaid,
-    debtRemaining: sale.paymentType === "debt" ? Math.max(0, sale.totalPrice - debtPaid) : 0,
-  });
+  return NextResponse.json(
+    enrichSaleDelivery({
+      ...sale,
+      debtPaid,
+      debtRemaining: sale.paymentType === "debt" ? Math.max(0, sale.totalPrice - debtPaid) : 0,
+    }),
+  );
 }
 
 export async function DELETE(_request: NextRequest, { params }: Params) {

@@ -1,12 +1,26 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Plus, Pencil, Trash2, Search, Printer, Banknote } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  Search,
+  Printer,
+  Banknote,
+  Package,
+  Eye,
+  History,
+} from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DateRangeFilter } from "@/components/ui/date-range-filter";
+import { LabeledSelect } from "@/components/ui/labeled-select";
 import {
   Dialog,
   DialogContent,
@@ -14,13 +28,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -30,10 +37,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatCurrency, formatDateTime } from "@/lib/labels";
-import { PAYMENT_TYPE_LABELS } from "@/lib/constants";
+import { PAYMENT_TYPE_LABELS, SALES_PERIOD_LABELS } from "@/lib/constants";
 import { todayDateString } from "@/lib/dates";
 import { printReceipt, type SaleWithRelations } from "@/components/sales/receipt";
-import { Badge } from "@/components/ui/badge";
 
 interface Client {
   id: string;
@@ -42,24 +48,61 @@ interface Client {
   phone: string;
 }
 
+interface GoodsDeliveryRow {
+  id: string;
+  quantity: number;
+  licensePlate: string;
+  note: string;
+  createdAt: string;
+  user: { displayName: string };
+}
+
 interface SaleRow extends SaleWithRelations {
   debtPaid?: number;
   debtRemaining?: number;
+  deliveredQuantity?: number;
+  remainingQuantity?: number;
+  paidAmount?: number;
+  goodsDeliveries?: GoodsDeliveryRow[];
 }
 
+const PAYMENT_OPTIONS = [
+  { value: "paid", label: PAYMENT_TYPE_LABELS.paid },
+  { value: "debt", label: PAYMENT_TYPE_LABELS.debt },
+  { value: "prepayment", label: PAYMENT_TYPE_LABELS.prepayment },
+];
+
+const PERIOD_OPTIONS = Object.entries(SALES_PERIOD_LABELS).map(([value, label]) => ({
+  value,
+  label,
+}));
+
 export default function SalesPage() {
-  const today = todayDateString();
+  const [tab, setTab] = useState<"sales" | "pending">("sales");
   const [sales, setSales] = useState<SaleRow[]>([]);
+  const [pendingSales, setPendingSales] = useState<SaleRow[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [userName, setUserName] = useState("");
   const [search, setSearch] = useState("");
+  const [period, setPeriod] = useState("today");
+  const [customFrom, setCustomFrom] = useState(todayDateString());
+  const [customTo, setCustomTo] = useState(todayDateString());
+  const [periodLabel, setPeriodLabel] = useState(SALES_PERIOD_LABELS.today);
   const [loading, setLoading] = useState(true);
+
   const [open, setOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailSale, setDetailSale] = useState<SaleRow | null>(null);
   const [repayOpen, setRepayOpen] = useState(false);
-  const [repaySale, setRepaySale] = useState<SaleRow | null>(null);
+  const [deliverOpen, setDeliverOpen] = useState(false);
+  const [actionSale, setActionSale] = useState<SaleRow | null>(null);
   const [repayAmount, setRepayAmount] = useState("");
   const [repayNote, setRepayNote] = useState("");
-  const [repayError, setRepayError] = useState("");
+  const [deliverQty, setDeliverQty] = useState("");
+  const [deliverPlate, setDeliverPlate] = useState("");
+  const [deliverNote, setDeliverNote] = useState("");
+  const [actionError, setActionError] = useState("");
+
   const [editing, setEditing] = useState<SaleRow | null>(null);
   const [mode, setMode] = useState<"existing" | "new">("new");
   const [form, setForm] = useState({
@@ -72,40 +115,59 @@ export default function SalesPage() {
     totalPrice: "",
     notes: "",
     paymentType: "paid",
+    initialDeliveryQuantity: "",
+    initialDeliveryPlate: "",
   });
 
+  const clientOptions = useMemo(
+    () =>
+      clients.map((client) => ({
+        value: client.id,
+        label: `${client.carBrand} · ${client.licensePlate}`,
+      })),
+    [clients],
+  );
+
   const load = useCallback(async () => {
-    const params = new URLSearchParams({
-      search,
-      from: today,
-      to: today,
-    });
-    const [salesRes, clientsRes, meRes] = await Promise.all([
+    setLoading(true);
+    const params = new URLSearchParams({ search, period });
+    if (period === "custom") {
+      params.set("from", customFrom);
+      params.set("to", customTo);
+    }
+
+    const [salesRes, pendingRes, clientsRes, meRes] = await Promise.all([
       fetch(`/api/sales?${params}`),
+      fetch(`/api/sales?pending=1&search=${encodeURIComponent(search)}`),
       fetch("/api/clients"),
       fetch("/api/auth/me"),
     ]);
-    setSales(await salesRes.json());
+
+    const salesData = await salesRes.json();
+    setSales(salesData.sales ?? []);
+    setPeriodLabel(salesData.periodLabel ?? SALES_PERIOD_LABELS.today);
+    setPendingSales((await pendingRes.json()).sales ?? []);
     setClients(await clientsRes.json());
     const me = await meRes.json();
     setUserName(me.user?.displayName ?? "");
     setLoading(false);
-  }, [search, today]);
+  }, [search, period, customFrom, customTo]);
 
   useEffect(() => {
-    const t = setTimeout(load, 300);
-    return () => clearTimeout(t);
+    const timer = setTimeout(load, 300);
+    return () => clearTimeout(timer);
   }, [load]);
 
   function onPlateChange(plate: string) {
     const upper = plate.toUpperCase();
-    const found = clients.find((c) => c.licensePlate === upper);
-    setForm((f) => ({
-      ...f,
+    const found = clients.find((client) => client.licensePlate === upper);
+    setForm((current) => ({
+      ...current,
       licensePlate: upper,
-      carBrand: found?.carBrand ?? f.carBrand,
-      phone: found?.phone ?? f.phone,
+      carBrand: found?.carBrand ?? current.carBrand,
+      phone: found?.phone ?? current.phone,
       clientId: found?.id ?? "",
+      initialDeliveryPlate: upper || current.initialDeliveryPlate,
     }));
   }
 
@@ -129,6 +191,8 @@ export default function SalesPage() {
       totalPrice: "",
       notes: "",
       paymentType: "paid",
+      initialDeliveryQuantity: "",
+      initialDeliveryPlate: "",
     });
     setOpen(true);
   }
@@ -146,39 +210,15 @@ export default function SalesPage() {
       totalPrice: String(sale.totalPrice),
       notes: sale.notes,
       paymentType: sale.paymentType ?? "paid",
+      initialDeliveryQuantity: "",
+      initialDeliveryPlate: sale.client.licensePlate,
     });
     setOpen(true);
   }
 
-  function openRepay(sale: SaleRow) {
-    setRepaySale(sale);
-    setRepayAmount(String(sale.debtRemaining ?? sale.totalPrice));
-    setRepayNote("");
-    setRepayError("");
-    setRepayOpen(true);
-  }
-
-  async function handleRepay(full: boolean) {
-    if (!repaySale) return;
-    setRepayError("");
-
-    const amount = full
-      ? repaySale.debtRemaining ?? 0
-      : Number(repayAmount);
-
-    const res = await fetch(`/api/sales/${repaySale.id}/repay`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount, note: repayNote }),
-    });
-    const data = await res.json();
-
-    if (res.ok) {
-      setRepayOpen(false);
-      load();
-    } else {
-      setRepayError(data.error || "Ошибка погашения");
-    }
+  function openDetails(sale: SaleRow) {
+    setDetailSale(sale);
+    setDetailOpen(true);
   }
 
   async function handleSave(andPrint: boolean) {
@@ -204,13 +244,16 @@ export default function SalesPage() {
           totalPrice: total,
           notes: form.notes,
           paymentType: form.paymentType,
+          initialDeliveryQuantity:
+            form.paymentType === "prepayment"
+              ? Number(form.initialDeliveryQuantity) || 0
+              : undefined,
+          initialDeliveryPlate:
+            form.paymentType === "prepayment" ? form.initialDeliveryPlate : undefined,
         };
 
-    const url = editing ? `/api/sales/${editing.id}` : "/api/sales";
-    const method = editing ? "PUT" : "POST";
-
-    const res = await fetch(url, {
-      method,
+    const res = await fetch(editing ? `/api/sales/${editing.id}` : "/api/sales", {
+      method: editing ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
@@ -229,6 +272,180 @@ export default function SalesPage() {
     load();
   }
 
+  async function handleRepay(full: boolean) {
+    if (!actionSale) return;
+    setActionError("");
+    const amount = full ? actionSale.debtRemaining ?? 0 : Number(repayAmount);
+    const res = await fetch(`/api/sales/${actionSale.id}/repay`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount, note: repayNote }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setRepayOpen(false);
+      load();
+    } else {
+      setActionError(data.error || "Ошибка погашения");
+    }
+  }
+
+  async function handleDeliver() {
+    if (!actionSale) return;
+    setActionError("");
+    const res = await fetch(`/api/sales/${actionSale.id}/deliver`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        quantity: Number(deliverQty),
+        licensePlate: deliverPlate,
+        note: deliverNote,
+      }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setDeliverOpen(false);
+      load();
+    } else {
+      setActionError(data.error || "Ошибка выдачи");
+    }
+  }
+
+  async function handleDeleteDelivery(saleId: string, deliveryId: string) {
+    if (!confirm("Удалить запись выдачи?")) return;
+    await fetch(`/api/sales/${saleId}/deliver/${deliveryId}`, { method: "DELETE" });
+    load();
+    if (detailSale?.id === saleId) {
+      const res = await fetch(`/api/sales/${saleId}`);
+      if (res.ok) setDetailSale(await res.json());
+    }
+  }
+
+  function renderPaymentBadge(sale: SaleRow) {
+    return (
+      <Badge
+        variant={
+          sale.paymentType === "debt"
+            ? "destructive"
+            : sale.paymentType === "prepayment"
+              ? "secondary"
+              : "outline"
+        }
+      >
+        {PAYMENT_TYPE_LABELS[sale.paymentType] ?? PAYMENT_TYPE_LABELS.paid}
+      </Badge>
+    );
+  }
+
+  function renderSalesTable(items: SaleRow[], showPeriodInfo = false) {
+    if (items.length === 0) {
+      return (
+        <div className="rounded-lg border border-dashed p-12 text-center text-zinc-500">
+          {showPeriodInfo
+            ? `Продаж за период «${periodLabel}» пока нет.`
+            : "Нет продаж с не выданным товаром."}
+        </div>
+      );
+    }
+
+    return (
+      <div className="rounded-lg border bg-white overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Дата</TableHead>
+              <TableHead>Клиент</TableHead>
+              <TableHead className="hidden md:table-cell">Гос. номер</TableHead>
+              <TableHead>Оплата</TableHead>
+              <TableHead>Куплено</TableHead>
+              <TableHead>Выдано</TableHead>
+              <TableHead>Осталось</TableHead>
+              <TableHead>Итого</TableHead>
+              <TableHead className="w-40">Действия</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {items.map((sale) => (
+              <TableRow key={sale.id}>
+                <TableCell className="text-xs whitespace-nowrap">
+                  {formatDateTime(sale.createdAt)}
+                </TableCell>
+                <TableCell className="font-medium">{sale.client.carBrand}</TableCell>
+                <TableCell className="hidden md:table-cell font-mono">
+                  {sale.client.licensePlate}
+                </TableCell>
+                <TableCell>{renderPaymentBadge(sale)}</TableCell>
+                <TableCell>{sale.quantity} шт</TableCell>
+                <TableCell>{sale.deliveredQuantity ?? sale.quantity} шт</TableCell>
+                <TableCell>
+                  {sale.paymentType === "prepayment" && (sale.remainingQuantity ?? 0) > 0 ? (
+                    <span className="font-medium text-orange-600">
+                      {sale.remainingQuantity} шт
+                    </span>
+                  ) : (
+                    "—"
+                  )}
+                </TableCell>
+                <TableCell className="font-semibold">
+                  {formatCurrency(sale.totalPrice)}
+                </TableCell>
+                <TableCell>
+                  <div className="flex gap-1">
+                    {(sale.remainingQuantity ?? 0) > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title="Выдать товар"
+                        onClick={() => {
+                          setActionSale(sale);
+                          setDeliverQty(String(sale.remainingQuantity));
+                          setDeliverPlate(sale.client.licensePlate);
+                          setDeliverNote("");
+                          setActionError("");
+                          setDeliverOpen(true);
+                        }}
+                      >
+                        <Package className="h-4 w-4 text-orange-600" />
+                      </Button>
+                    )}
+                    {(sale.debtRemaining ?? 0) > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title="Погашение долга"
+                        onClick={() => {
+                          setActionSale(sale);
+                          setRepayAmount(String(sale.debtRemaining));
+                          setRepayNote("");
+                          setActionError("");
+                          setRepayOpen(true);
+                        }}
+                      >
+                        <Banknote className="h-4 w-4 text-green-600" />
+                      </Button>
+                    )}
+                    <Button variant="ghost" size="icon" title="Детали" onClick={() => openDetails(sale)}>
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" title="Печать" onClick={() => printReceipt(sale)}>
+                      <Printer className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => openEdit(sale)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => handleDelete(sale.id)}>
+                      <Trash2 className="h-4 w-4 text-red-500" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    );
+  }
+
   if (loading) {
     return <div className="flex h-64 items-center justify-center text-zinc-500">Загрузка...</div>;
   }
@@ -237,7 +454,7 @@ export default function SalesPage() {
     <div>
       <PageHeader
         title="Продажи"
-        description={`Реестр продаж за сегодня (${new Date().toLocaleDateString("ru-RU")})`}
+        description="Оформление продаж и выдача предоплаченного товара"
         userName={userName}
         action={
           <Button onClick={openCreate} className="bg-orange-500 hover:bg-orange-600">
@@ -247,165 +464,211 @@ export default function SalesPage() {
         }
       />
 
-      <div className="relative mb-4 max-w-sm">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-        <Input
-          placeholder="Поиск по марке или номеру..."
-          className="pl-9"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-      </div>
+      <Tabs value={tab} onValueChange={(value) => setTab(value as "sales" | "pending")}>
+        <TabsList className="mb-4">
+          <TabsTrigger value="sales">Реестр продаж</TabsTrigger>
+          <TabsTrigger value="pending">
+            Остатки клиентов ({pendingSales.length})
+          </TabsTrigger>
+        </TabsList>
 
-      {sales.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-12 text-center text-zinc-500">
-          Продаж за сегодня пока нет.
-        </div>
-      ) : (
-        <div className="rounded-lg border bg-white">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Дата</TableHead>
-                <TableHead>Клиент</TableHead>
-                <TableHead className="hidden md:table-cell">Гос. номер</TableHead>
-                <TableHead>Кол-во</TableHead>
-                <TableHead>Оплата</TableHead>
-                <TableHead>Итого</TableHead>
-                <TableHead className="hidden lg:table-cell">Долг</TableHead>
-                <TableHead className="w-36">Действия</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sales.map((sale) => (
-                <TableRow key={sale.id}>
-                  <TableCell className="text-xs whitespace-nowrap">
-                    {formatDateTime(sale.createdAt)}
-                  </TableCell>
-                  <TableCell className="font-medium">{sale.client.carBrand}</TableCell>
-                  <TableCell className="hidden md:table-cell font-mono">
-                    {sale.client.licensePlate}
-                  </TableCell>
-                  <TableCell>{sale.quantity} шт</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        sale.paymentType === "debt"
-                          ? "destructive"
-                          : sale.paymentType === "prepayment"
-                            ? "secondary"
-                            : "outline"
-                      }
-                    >
-                      {PAYMENT_TYPE_LABELS[sale.paymentType] ?? "Оплачено"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="font-semibold">
-                    {formatCurrency(sale.totalPrice)}
-                  </TableCell>
-                  <TableCell className="hidden lg:table-cell text-sm">
-                    {(sale.debtRemaining ?? 0) > 0 ? (
-                      <span className="text-red-600">{formatCurrency(sale.debtRemaining!)}</span>
-                    ) : sale.paymentType === "debt" && (sale.debtPaid ?? 0) > 0 ? (
-                      <span className="text-green-600">Погашено</span>
-                    ) : (
-                      "—"
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      {(sale.debtRemaining ?? 0) > 0 && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Погашение долга"
-                          onClick={() => openRepay(sale)}
-                        >
-                          <Banknote className="h-4 w-4 text-green-600" />
-                        </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        title="Печать чека"
-                        onClick={() => printReceipt(sale)}
-                      >
-                        <Printer className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => openEdit(sale)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(sale.id)}>
-                        <Trash2 className="h-4 w-4 text-red-500" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+        <TabsContent value="sales" className="space-y-4">
+          <div className="flex flex-col gap-4 rounded-lg border bg-white p-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-sm font-medium text-zinc-700">Период: {periodLabel}</p>
+              <p className="text-xs text-zinc-500">Показаны продажи только за выбранный период</p>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <div className="grid gap-1">
+                <Label className="text-xs text-zinc-500">Период</Label>
+                <LabeledSelect
+                  value={period}
+                  onValueChange={setPeriod}
+                  options={PERIOD_OPTIONS}
+                  triggerClassName="w-48"
+                />
+              </div>
+              {period === "custom" && (
+                <DateRangeFilter
+                  from={customFrom}
+                  to={customTo}
+                  onFromChange={setCustomFrom}
+                  onToChange={setCustomTo}
+                />
+              )}
+            </div>
+          </div>
+
+          <div className="relative max-w-sm">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+            <Input
+              placeholder="Поиск по марке или номеру..."
+              className="pl-9"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
+          {renderSalesTable(sales, true)}
+        </TabsContent>
+
+        <TabsContent value="pending" className="space-y-4">
+          <div className="rounded-lg border bg-orange-50 p-4 text-sm text-orange-900">
+            Здесь показаны предоплаченные продажи, по которым клиенту ещё не выдан весь товар.
+            Это товарный остаток, отдельно от денежного долга клиента.
+          </div>
+          {renderSalesTable(pendingSales)}
+        </TabsContent>
+      </Tabs>
+
+      <Dialog open={deliverOpen} onOpenChange={setDeliverOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Выдача товара</DialogTitle>
+          </DialogHeader>
+          {actionSale && (
+            <div className="space-y-4 py-2">
+              <p className="text-sm text-zinc-600">
+                {actionSale.client.carBrand} · куплено {actionSale.quantity} шт, осталось{" "}
+                {actionSale.remainingQuantity} шт
+              </p>
+              <div className="grid gap-2">
+                <Label>Количество, шт</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={actionSale.remainingQuantity}
+                  value={deliverQty}
+                  onChange={(e) => setDeliverQty(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Гос. номер автомобиля</Label>
+                <Input
+                  value={deliverPlate}
+                  onChange={(e) => setDeliverPlate(e.target.value.toUpperCase())}
+                  className="font-mono uppercase"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Комментарий</Label>
+                <Textarea value={deliverNote} onChange={(e) => setDeliverNote(e.target.value)} />
+              </div>
+              {actionError && <p className="text-sm text-red-600">{actionError}</p>}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeliverOpen(false)}>Отмена</Button>
+            <Button className="bg-orange-500 hover:bg-orange-600" onClick={handleDeliver}>
+              Выдать
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={repayOpen} onOpenChange={setRepayOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Погашение долга</DialogTitle>
           </DialogHeader>
-          {repaySale && (
+          {actionSale && (
             <div className="space-y-4 py-2">
-              <p className="text-sm text-zinc-600">
-                {repaySale.client.carBrand} · {repaySale.client.licensePlate}
-              </p>
               <p className="text-sm">
                 Остаток долга:{" "}
                 <span className="font-semibold text-red-600">
-                  {formatCurrency(repaySale.debtRemaining ?? 0)}
+                  {formatCurrency(actionSale.debtRemaining ?? 0)}
                 </span>
               </p>
               <div className="grid gap-2">
                 <Label>Сумма погашения, сум</Label>
                 <Input
                   type="number"
-                  min={1}
-                  max={repaySale.debtRemaining}
                   value={repayAmount}
                   onChange={(e) => setRepayAmount(e.target.value)}
                 />
               </div>
               <div className="grid gap-2">
                 <Label>Примечание</Label>
-                <Textarea
-                  value={repayNote}
-                  onChange={(e) => setRepayNote(e.target.value)}
-                />
+                <Textarea value={repayNote} onChange={(e) => setRepayNote(e.target.value)} />
               </div>
-              {repayError && (
-                <p className="text-sm text-red-600">{repayError}</p>
-              )}
+              {actionError && <p className="text-sm text-red-600">{actionError}</p>}
             </div>
           )}
-          <DialogFooter className="flex-col gap-2 sm:flex-row">
+          <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setRepayOpen(false)}>Отмена</Button>
-            <Button
-              variant="outline"
-              onClick={() => handleRepay(false)}
-              disabled={!repayAmount || Number(repayAmount) <= 0}
-            >
-              Частично
-            </Button>
-            <Button
-              className="bg-green-600 hover:bg-green-700"
-              onClick={() => handleRepay(true)}
-            >
+            <Button variant="outline" onClick={() => handleRepay(false)}>Частично</Button>
+            <Button className="bg-green-600 hover:bg-green-700" onClick={() => handleRepay(true)}>
               Погасить полностью
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="h-4 w-4" />
+              Детали продажи
+            </DialogTitle>
+          </DialogHeader>
+          {detailSale && (
+            <div className="space-y-4 py-2">
+              <div className="grid gap-2 rounded-lg bg-zinc-50 p-4 text-sm sm:grid-cols-2">
+                <p><span className="text-zinc-500">Клиент:</span> {detailSale.client.carBrand}</p>
+                <p><span className="text-zinc-500">Гос. номер:</span> {detailSale.client.licensePlate}</p>
+                <p><span className="text-zinc-500">Оплата:</span> {PAYMENT_TYPE_LABELS[detailSale.paymentType]}</p>
+                <p><span className="text-zinc-500">Куплено:</span> {detailSale.quantity} шт</p>
+                <p><span className="text-zinc-500">Выдано:</span> {detailSale.deliveredQuantity ?? 0} шт</p>
+                <p><span className="text-zinc-500">Осталось:</span> {detailSale.remainingQuantity ?? 0} шт</p>
+                <p><span className="text-zinc-500">Цена/шт:</span> {formatCurrency(detailSale.pricePerUnit)}</p>
+                <p><span className="text-zinc-500">Оплачено:</span> {formatCurrency(detailSale.totalPrice)}</p>
+              </div>
+
+              <div>
+                <h3 className="mb-2 text-sm font-medium">История выдач</h3>
+                {(detailSale.goodsDeliveries?.length ?? 0) === 0 ? (
+                  <p className="text-sm text-zinc-500">Выдач пока нет</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Дата</TableHead>
+                        <TableHead>Кол-во</TableHead>
+                        <TableHead>Гос. номер</TableHead>
+                        <TableHead>Оператор</TableHead>
+                        <TableHead className="w-12" />
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {detailSale.goodsDeliveries?.map((delivery) => (
+                        <TableRow key={delivery.id}>
+                          <TableCell className="text-xs">{formatDateTime(delivery.createdAt)}</TableCell>
+                          <TableCell>{delivery.quantity} шт</TableCell>
+                          <TableCell className="font-mono">{delivery.licensePlate}</TableCell>
+                          <TableCell>{delivery.user.displayName}</TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteDelivery(detailSale.id, delivery.id)}
+                            >
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>{editing ? "Редактировать продажу" : "Новая продажа"}</DialogTitle>
           </DialogHeader>
@@ -436,48 +699,52 @@ export default function SalesPage() {
             {!editing && mode === "existing" ? (
               <div className="grid gap-2">
                 <Label>Клиент</Label>
-                <Select
+                <LabeledSelect
                   value={form.clientId}
-                  onValueChange={(v) => v && setForm({ ...form, clientId: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Выберите клиента" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clients.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.carBrand} · {c.licensePlate}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onValueChange={(value) => {
+                    const client = clients.find((item) => item.id === value);
+                    setForm({
+                      ...form,
+                      clientId: value,
+                      carBrand: client?.carBrand ?? form.carBrand,
+                      licensePlate: client?.licensePlate ?? form.licensePlate,
+                      phone: client?.phone ?? form.phone,
+                      initialDeliveryPlate: client?.licensePlate ?? form.initialDeliveryPlate,
+                    });
+                  }}
+                  options={clientOptions}
+                  placeholder="Выберите клиента"
+                  triggerClassName="w-full"
+                />
               </div>
             ) : (
               <>
-                <div className="grid gap-2">
-                  <Label>Марка авто *</Label>
-                  <Input
-                    value={form.carBrand}
-                    onChange={(e) => setForm({ ...form, carBrand: e.target.value })}
-                    disabled={!!editing}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Гос. номер *</Label>
-                  <Input
-                    value={form.licensePlate}
-                    onChange={(e) => onPlateChange(e.target.value)}
-                    list="plates-list"
-                    className="font-mono uppercase"
-                    disabled={!!editing}
-                  />
-                  <datalist id="plates-list">
-                    {clients.map((c) => (
-                      <option key={c.id} value={c.licensePlate}>
-                        {c.carBrand}
-                      </option>
-                    ))}
-                  </datalist>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-2">
+                    <Label>Марка авто *</Label>
+                    <Input
+                      value={form.carBrand}
+                      onChange={(e) => setForm({ ...form, carBrand: e.target.value })}
+                      disabled={!!editing}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Гос. номер *</Label>
+                    <Input
+                      value={form.licensePlate}
+                      onChange={(e) => onPlateChange(e.target.value)}
+                      list="plates-list"
+                      className="font-mono uppercase"
+                      disabled={!!editing}
+                    />
+                    <datalist id="plates-list">
+                      {clients.map((client) => (
+                        <option key={client.id} value={client.licensePlate}>
+                          {client.carBrand}
+                        </option>
+                      ))}
+                    </datalist>
+                  </div>
                 </div>
                 {!editing && (
                   <div className="grid gap-2">
@@ -495,7 +762,7 @@ export default function SalesPage() {
               <p className="text-sm font-medium">Товар: Шлакоблок</p>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="grid gap-2">
                 <Label>Кол-во, шт *</Label>
                 <Input
@@ -542,20 +809,51 @@ export default function SalesPage() {
 
             <div className="grid gap-2">
               <Label>Тип оплаты *</Label>
-              <Select
+              <LabeledSelect
                 value={form.paymentType}
-                onValueChange={(v) => v && setForm({ ...form, paymentType: v })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="paid">Оплачено</SelectItem>
-                  <SelectItem value="debt">В долг</SelectItem>
-                  <SelectItem value="prepayment">Предоплата</SelectItem>
-                </SelectContent>
-              </Select>
+                onValueChange={(value) => setForm({ ...form, paymentType: value })}
+                options={PAYMENT_OPTIONS}
+                triggerClassName="w-full"
+              />
             </div>
+
+            {!editing && form.paymentType === "prepayment" && (
+              <div className="grid gap-4 rounded-lg border border-orange-200 bg-orange-50 p-4 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <p className="text-sm font-medium text-orange-900">
+                    Первичная выдача (необязательно)
+                  </p>
+                  <p className="text-xs text-orange-800">
+                    Если клиент забирает часть товара сразу, укажите количество и гос. номер.
+                  </p>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Выдать сейчас, шт</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={Number(form.quantity) || undefined}
+                    value={form.initialDeliveryQuantity}
+                    onChange={(e) =>
+                      setForm({ ...form, initialDeliveryQuantity: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Гос. номер при выдаче</Label>
+                  <Input
+                    value={form.initialDeliveryPlate}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        initialDeliveryPlate: e.target.value.toUpperCase(),
+                      })
+                    }
+                    className="font-mono uppercase"
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="grid gap-2">
               <Label>Примечание</Label>

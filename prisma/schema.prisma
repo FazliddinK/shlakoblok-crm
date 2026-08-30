@@ -19,6 +19,7 @@ model User {
   deletedRecords DeletedRecord[] @relation("DeletedBy")
   changeRecords  ChangeRecord[]  @relation("ChangedBy")
   debtPayments   DebtPayment[]
+  goodsDeliveries GoodsDelivery[]
 }
 
 model AppSettings {
@@ -52,6 +53,7 @@ model Sale {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   debtPayments DebtPayment[]
+  goodsDeliveries GoodsDelivery[]
 }
 
 model DebtPayment {
@@ -63,6 +65,18 @@ model DebtPayment {
   userId    String
   user      User     @relation(fields: [userId], references: [id])
   createdAt DateTime @default(now())
+}
+
+model GoodsDelivery {
+  id           String   @id @default(cuid())
+  saleId       String
+  sale         Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  quantity     Int
+  licensePlate String
+  note         String   @default("")
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  createdAt    DateTime @default(now())
 }
 
 model Counterparty {
