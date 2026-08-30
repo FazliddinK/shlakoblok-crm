@@ -7,6 +7,9 @@ cd /app
 echo "→ Применение миграций базы данных..."
 npx prisma migrate deploy
 
+echo "→ Пересчёт балансов клиентов..."
+npx tsx scripts/recalculate-balances.ts
+
 echo "→ Проверка начальных данных..."
 node <<'EOF'
 const { PrismaClient } = require("@prisma/client");

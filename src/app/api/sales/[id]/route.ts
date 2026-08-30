@@ -2,12 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import {
-  applySaleEffects,
   archiveRecord,
   enrichSaleDelivery,
   getSaleDebtPaid,
+  recalculateClientBalance,
   reverseDebtPaymentsForSale,
-  reverseSaleEffects,
   saleInclude,
 } from "@/lib/finance";
 import { describeChanges, logChange } from "@/lib/audit";
@@ -99,15 +98,13 @@ export async function PUT(request: NextRequest, { params }: Params) {
     await reverseDebtPaymentsForSale(existing.id, existing.clientId);
   }
 
-  await reverseSaleEffects(existing);
-
   const sale = await prisma.sale.update({
     where: { id },
     data: newData,
     include: saleInclude,
   });
 
-  await applySaleEffects(sale);
+  await recalculateClientBalance(existing.clientId);
 
   await sendTelegramMessage(
     formatTelegramMessage(
@@ -145,7 +142,6 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
   }
 
   await reverseDebtPaymentsForSale(sale.id, sale.clientId);
-  await reverseSaleEffects(sale);
 
   await archiveRecord(
     "sale",

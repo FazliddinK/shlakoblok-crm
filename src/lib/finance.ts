@@ -19,40 +19,62 @@ export async function archiveRecord(
   });
 }
 
+export async function recalculateClientBalance(clientId: string): Promise<number> {
+  const sales = await prisma.sale.findMany({
+    where: { clientId },
+    include: {
+      debtPayments: true,
+      goodsDeliveries: true,
+    },
+  });
+
+  let balance = 0;
+
+  for (const sale of sales) {
+    if (sale.paymentType === "debt") {
+      balance += sale.totalPrice;
+      for (const payment of sale.debtPayments) {
+        balance -= payment.amount;
+      }
+    } else if (sale.paymentType === "prepayment") {
+      balance -= sale.totalPrice;
+      for (const delivery of sale.goodsDeliveries) {
+        balance += delivery.quantity * sale.pricePerUnit;
+      }
+    }
+  }
+
+  await prisma.client.update({
+    where: { id: clientId },
+    data: { balance },
+  });
+
+  return balance;
+}
+
+export async function recalculateAllClientBalances() {
+  const clients = await prisma.client.findMany({ select: { id: true } });
+  for (const client of clients) {
+    await recalculateClientBalance(client.id);
+  }
+}
+
+/** @deprecated use recalculateClientBalance after mutations */
 export async function reverseSaleEffects(sale: {
   clientId: string;
   totalPrice: number;
   paymentType: string;
 }) {
-  if (sale.paymentType === "debt") {
-    await prisma.client.update({
-      where: { id: sale.clientId },
-      data: { balance: { decrement: sale.totalPrice } },
-    });
-  } else if (sale.paymentType === "prepayment") {
-    await prisma.client.update({
-      where: { id: sale.clientId },
-      data: { balance: { increment: sale.totalPrice } },
-    });
-  }
+  await recalculateClientBalance(sale.clientId);
 }
 
+/** @deprecated use recalculateClientBalance after mutations */
 export async function applySaleEffects(sale: {
   clientId: string;
   totalPrice: number;
   paymentType: string;
 }) {
-  if (sale.paymentType === "debt") {
-    await prisma.client.update({
-      where: { id: sale.clientId },
-      data: { balance: { increment: sale.totalPrice } },
-    });
-  } else if (sale.paymentType === "prepayment") {
-    await prisma.client.update({
-      where: { id: sale.clientId },
-      data: { balance: { decrement: sale.totalPrice } },
-    });
-  }
+  await recalculateClientBalance(sale.clientId);
 }
 
 export type SaleWithDeliveries = {
@@ -61,8 +83,9 @@ export type SaleWithDeliveries = {
   totalPrice: number;
   pricePerUnit: number;
   paymentType: string;
+  createdAt?: Date | string;
   goodsDeliveries?: { quantity: number }[];
-  client?: { carBrand: string; licensePlate: string };
+  client?: { carBrand: string; licensePlate: string; id?: string };
 };
 
 export function getDeliveredQuantity(sale: SaleWithDeliveries): number {
@@ -86,18 +109,27 @@ export function enrichSaleDelivery<T extends SaleWithDeliveries>(
   deliveredQuantity: number;
   remainingQuantity: number;
   paidAmount: number;
+  prepaymentRemainingAmount: number;
+  totalQuantity: number;
+  unitPrice: number;
+  totalAmount: number;
 } {
   const deliveredQuantity = getDeliveredQuantity(sale);
   const remainingQuantity =
     sale.paymentType === "prepayment"
       ? Math.max(0, sale.quantity - deliveredQuantity)
       : 0;
+  const prepaymentRemainingAmount = remainingQuantity * sale.pricePerUnit;
 
   return {
     ...sale,
+    totalQuantity: sale.quantity,
+    unitPrice: sale.pricePerUnit,
+    totalAmount: sale.totalPrice,
     deliveredQuantity,
     remainingQuantity,
     paidAmount: sale.totalPrice,
+    prepaymentRemainingAmount,
   };
 }
 
@@ -120,14 +152,8 @@ export async function getSaleDebtRemaining(sale: {
 }
 
 export async function reverseDebtPaymentsForSale(saleId: string, clientId: string) {
-  const payments = await prisma.debtPayment.findMany({ where: { saleId } });
-  for (const payment of payments) {
-    await prisma.client.update({
-      where: { id: clientId },
-      data: { balance: { increment: payment.amount } },
-    });
-  }
   await prisma.debtPayment.deleteMany({ where: { saleId } });
+  await recalculateClientBalance(clientId);
 }
 
 export async function applyDebtPayment(
@@ -141,11 +167,7 @@ export async function applyDebtPayment(
     data: { saleId, amount, userId, note },
   });
 
-  await prisma.client.update({
-    where: { id: clientId },
-    data: { balance: { decrement: amount } },
-  });
-
+  await recalculateClientBalance(clientId);
   return payment;
 }
 
@@ -181,18 +203,24 @@ export async function getFinanceSummary() {
 
   const cashFromRepayments = debtPayments.reduce((sum, p) => sum + p.amount, 0);
   const cashIncome = cashFromSales + cashFromRepayments;
-
   const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
   const cashBalance = settings.openingBalance + cashIncome - totalExpenses;
 
-  const debtors = clients.filter((c) => c.balance > 0);
-  const prepayments = clients.filter((c) => c.balance < 0);
+  const debtors = clients
+    .filter((c) => c.balance > 0)
+    .map((c) => ({
+      clientId: c.id,
+      carBrand: c.carBrand,
+      licensePlate: c.licensePlate,
+      balance: c.balance,
+    }));
 
-  const pendingGoods = prepaymentSales
+  const activePrepayments = prepaymentSales
     .map((sale) => enrichSaleDelivery(sale))
     .filter((sale) => sale.remainingQuantity > 0)
     .map((sale) => ({
       saleId: sale.id,
+      clientId: sale.client.id,
       carBrand: sale.client.carBrand,
       licensePlate: sale.client.licensePlate,
       purchasedQuantity: sale.quantity,
@@ -200,8 +228,13 @@ export async function getFinanceSummary() {
       remainingQuantity: sale.remainingQuantity,
       pricePerUnit: sale.pricePerUnit,
       paidAmount: sale.totalPrice,
+      prepaymentRemainingAmount: sale.prepaymentRemainingAmount,
       createdAt: sale.createdAt,
     }));
+
+  const pendingGoods = activePrepayments;
+
+  const prepaymentClients = clients.filter((c) => c.balance < 0);
 
   return {
     openingBalance: settings.openingBalance,
@@ -211,7 +244,16 @@ export async function getFinanceSummary() {
     totalExpenses,
     cashBalance,
     debtors,
-    prepayments,
+    debtorsTotal: debtors.reduce((sum, d) => sum + d.balance, 0),
+    prepayments: prepaymentClients,
+    prepaymentsTotal: Math.abs(
+      prepaymentClients.reduce((sum, c) => sum + c.balance, 0),
+    ),
+    activePrepayments,
+    activePrepaymentsTotal: activePrepayments.reduce(
+      (sum, item) => sum + item.prepaymentRemainingAmount,
+      0,
+    ),
     pendingGoods,
   };
 }

@@ -40,10 +40,28 @@ export function resolveDateRange(
   return { from: undefined, to: undefined };
 }
 
+export const REPORT_PERIOD_LABELS: Record<string, string> = {
+  today: "Сегодня",
+  yesterday: "Вчера",
+  week: "Эта неделя",
+  month: "Этот месяц",
+  last_month: "Прошлый месяц",
+  custom: "Произвольный период",
+};
+
 export function resolveSalesPeriod(
   period: string,
   customFrom?: string | null,
   customTo?: string | null,
+) {
+  return resolveReportPeriod(period, customFrom, customTo, SALES_PERIOD_LABELS);
+}
+
+export function resolveReportPeriod(
+  period: string,
+  customFrom?: string | null,
+  customTo?: string | null,
+  labels: Record<string, string> = REPORT_PERIOD_LABELS,
 ) {
   const now = new Date();
   const today = todayDateString();
@@ -53,7 +71,7 @@ export function resolveSalesPeriod(
       const y = new Date(now);
       y.setDate(y.getDate() - 1);
       const date = formatDateString(y);
-      return { from: date, to: date, label: SALES_PERIOD_LABELS.yesterday };
+      return { from: date, to: date, label: labels.yesterday };
     }
     case "week": {
       const start = new Date(now);
@@ -63,7 +81,16 @@ export function resolveSalesPeriod(
       return {
         from: formatDateString(start),
         to: today,
-        label: SALES_PERIOD_LABELS.week,
+        label: labels.week,
+      };
+    }
+    case "last_month": {
+      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const end = new Date(now.getFullYear(), now.getMonth(), 0);
+      return {
+        from: formatDateString(start),
+        to: formatDateString(end),
+        label: labels.last_month,
       };
     }
     case "month": {
@@ -71,7 +98,7 @@ export function resolveSalesPeriod(
       return {
         from: formatDateString(start),
         to: today,
-        label: SALES_PERIOD_LABELS.month,
+        label: labels.month,
       };
     }
     case "custom": {
@@ -83,11 +110,11 @@ export function resolveSalesPeriod(
             ? customFrom === customTo
               ? customFrom
               : `${customFrom} — ${customTo}`
-            : SALES_PERIOD_LABELS.custom,
+            : labels.custom,
       };
     }
     case "today":
     default:
-      return { from: today, to: today, label: SALES_PERIOD_LABELS.today };
+      return { from: today, to: today, label: labels.today };
   }
 }

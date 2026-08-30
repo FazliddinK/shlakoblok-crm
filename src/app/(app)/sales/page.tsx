@@ -63,6 +63,7 @@ interface SaleRow extends SaleWithRelations {
   deliveredQuantity?: number;
   remainingQuantity?: number;
   paidAmount?: number;
+  prepaymentRemainingAmount?: number;
   goodsDeliveries?: GoodsDeliveryRow[];
 }
 
@@ -337,6 +338,73 @@ export default function SalesPage() {
     );
   }
 
+  function renderPendingTable(items: SaleRow[]) {
+    if (items.length === 0) {
+      return (
+        <div className="rounded-lg border border-dashed p-12 text-center text-zinc-500">
+          Нет продаж с не выданным товаром.
+        </div>
+      );
+    }
+
+    return (
+      <div className="rounded-lg border bg-white overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Клиент</TableHead>
+              <TableHead>Гос. номер</TableHead>
+              <TableHead>Куплено</TableHead>
+              <TableHead>Выдано</TableHead>
+              <TableHead>Осталось</TableHead>
+              <TableHead>Цена/шт</TableHead>
+              <TableHead>Остаток предоплаты</TableHead>
+              <TableHead>Дата оплаты</TableHead>
+              <TableHead className="w-24">Действия</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {items.map((sale) => (
+              <TableRow key={sale.id}>
+                <TableCell className="font-medium">{sale.client.carBrand}</TableCell>
+                <TableCell className="font-mono">{sale.client.licensePlate}</TableCell>
+                <TableCell>{sale.quantity} шт</TableCell>
+                <TableCell>{sale.deliveredQuantity ?? 0} шт</TableCell>
+                <TableCell className="font-medium text-orange-600">
+                  {sale.remainingQuantity ?? 0} шт
+                </TableCell>
+                <TableCell>{formatCurrency(sale.pricePerUnit)}</TableCell>
+                <TableCell className="font-semibold text-blue-600">
+                  {formatCurrency(sale.prepaymentRemainingAmount ?? 0)}
+                </TableCell>
+                <TableCell className="text-xs whitespace-nowrap">
+                  {formatDateTime(sale.createdAt)}
+                </TableCell>
+                <TableCell>
+                  <Button
+                    size="sm"
+                    className="bg-orange-500 hover:bg-orange-600"
+                    onClick={() => {
+                      setActionSale(sale);
+                      setDeliverQty(String(sale.remainingQuantity));
+                      setDeliverPlate(sale.client.licensePlate);
+                      setDeliverNote("");
+                      setActionError("");
+                      setDeliverOpen(true);
+                    }}
+                  >
+                    <Package className="mr-1 h-4 w-4" />
+                    Выдать
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    );
+  }
+
   function renderSalesTable(items: SaleRow[], showPeriodInfo = false) {
     if (items.length === 0) {
       return (
@@ -517,7 +585,7 @@ export default function SalesPage() {
             Здесь показаны предоплаченные продажи, по которым клиенту ещё не выдан весь товар.
             Это товарный остаток, отдельно от денежного долга клиента.
           </div>
-          {renderSalesTable(pendingSales)}
+          {renderPendingTable(pendingSales)}
         </TabsContent>
       </Tabs>
 

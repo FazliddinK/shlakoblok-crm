@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Trash2, Wallet, TrendingDown, TrendingUp } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,19 +38,9 @@ interface Expense {
   user: { displayName: string };
 }
 
-interface Summary {
-  openingBalance: number;
-  cashIncome: number;
-  totalExpenses: number;
-  cashBalance: number;
-  debtors: { carBrand: string; licensePlate: string; balance: number }[];
-  prepayments: { carBrand: string; licensePlate: string; balance: number }[];
-}
-
 export default function ExpensesPage() {
   const [userName, setUserName] = useState("");
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [summary, setSummary] = useState<Summary | null>(null);
   const [categories, setCategories] = useState<string[]>([]);
   const [counterparties, setCounterparties] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,7 +65,6 @@ export default function ExpensesPage() {
     ]);
     const expData = await expRes.json();
     setExpenses(expData.expenses ?? []);
-    setSummary(expData.summary ?? null);
     const cats = await catRes.json();
     const cps = await cpRes.json();
     setCategories(cats.map((c: { name: string }) => c.name));
@@ -114,17 +103,18 @@ export default function ExpensesPage() {
     load();
   }
 
-  if (loading || !summary) {
+  if (loading) {
     return <div className="flex h-64 items-center justify-center text-zinc-500">Загрузка...</div>;
   }
 
   const isToday = from === to && from === todayDateString();
+  const periodTotal = expenses.reduce((sum, expense) => sum + expense.amount, 0);
 
   return (
     <div>
       <PageHeader
         title="Расходы"
-        description="Учёт расходов и остаток денежных средств"
+        description="Журнал расходных операций"
         userName={userName}
         action={
           <Button onClick={() => setOpen(true)} className="bg-orange-500 hover:bg-orange-600">
@@ -134,74 +124,19 @@ export default function ExpensesPage() {
         }
       />
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <Wallet className="h-8 w-8 text-orange-500" />
-              <div>
-                <p className="text-sm text-zinc-500">Остаток в кассе</p>
-                <p className="text-2xl font-bold">{formatCurrency(summary.cashBalance)}</p>
-                <p className="text-xs text-zinc-400">
-                  {formatCurrency(summary.openingBalance)} + {formatCurrency(summary.cashIncome)} −{" "}
-                  {formatCurrency(summary.totalExpenses)}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-sm font-medium text-zinc-700">
-              <TrendingUp className="h-4 w-4 text-green-600" />
-              Должники ({summary.debtors.length})
-            </div>
-            <ul className="mt-2 max-h-24 space-y-1 overflow-y-auto text-sm">
-              {summary.debtors.length === 0 ? (
-                <li className="text-zinc-400">Нет должников</li>
-              ) : (
-                summary.debtors.map((c) => (
-                  <li key={c.licensePlate} className="flex justify-between">
-                    <span>{c.licensePlate}</span>
-                    <span className="font-medium text-red-600">{formatCurrency(c.balance)}</span>
-                  </li>
-                ))
-              )}
-            </ul>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-sm font-medium text-zinc-700">
-              <TrendingDown className="h-4 w-4 text-blue-600" />
-              Предоплаты ({summary.prepayments.length})
-            </div>
-            <ul className="mt-2 max-h-24 space-y-1 overflow-y-auto text-sm">
-              {summary.prepayments.length === 0 ? (
-                <li className="text-zinc-400">Нет предоплат</li>
-              ) : (
-                summary.prepayments.map((c) => (
-                  <li key={c.licensePlate} className="flex justify-between">
-                    <span>{c.licensePlate}</span>
-                    <span className="font-medium text-blue-600">
-                      {formatCurrency(Math.abs(c.balance))}
-                    </span>
-                  </li>
-                ))
-              )}
-            </ul>
-          </CardContent>
-        </Card>
-      </div>
-
       <Card>
         <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <CardTitle className="text-base">
-            Журнал расходов
-            {isToday && (
-              <span className="ml-2 text-sm font-normal text-zinc-500">(сегодня)</span>
-            )}
-          </CardTitle>
+          <div>
+            <CardTitle className="text-base">
+              Журнал расходов
+              {isToday && (
+                <span className="ml-2 text-sm font-normal text-zinc-500">(сегодня)</span>
+              )}
+            </CardTitle>
+            <p className="mt-1 text-sm text-zinc-500">
+              Итого за период: <span className="font-semibold text-red-600">{formatCurrency(periodTotal)}</span>
+            </p>
+          </div>
           <DateRangeFilter
             from={from}
             to={to}

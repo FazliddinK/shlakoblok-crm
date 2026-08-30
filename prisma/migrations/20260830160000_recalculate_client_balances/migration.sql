@@ -1,0 +1,2 @@
+-- Data migration: client balances are recalculated at application startup
+-- using scripts/recalculate-balances.ts (prepayment offset by goods deliveries).

@@ -2,13 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import {
-  applySaleEffects,
   enrichSaleDelivery,
   getSaleDebtPaid,
+  recalculateClientBalance,
   saleInclude,
 } from "@/lib/finance";
 import { buildDateFilter, resolveSalesPeriod } from "@/lib/dates";
-import { sendTelegramMessage, formatTelegramMessage, operatorFromSession } from "@/lib/telegram";
+import {
+  formatSaleTelegramMessage,
+  formatTelegramMessage,
+  operatorFromSession,
+  sendTelegramMessage,
+} from "@/lib/telegram";
 import { PAYMENT_TYPE_LABELS } from "@/lib/constants";
 
 export async function GET(request: NextRequest) {
@@ -135,8 +140,6 @@ export async function POST(request: NextRequest) {
     include: saleInclude,
   });
 
-  await applySaleEffects(sale);
-
   if (payType === "paid") {
     await prisma.goodsDelivery.create({
       data: {
@@ -166,21 +169,23 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  await recalculateClientBalance(resolvedClientId);
+
   const fullSale = await prisma.sale.findUnique({
     where: { id: sale.id },
     include: saleInclude,
   });
 
   await sendTelegramMessage(
-    formatTelegramMessage(
-      "создание",
-      "Продажа шлакоблоков",
-      `🚗 ${fullSale!.client.carBrand} (${fullSale!.client.licensePlate})\n` +
-        `📦 ${fullSale!.quantity} шт × ${fullSale!.pricePerUnit} сум\n` +
-        `💵 Итого: ${fullSale!.totalPrice} сум\n` +
-        `💳 ${PAYMENT_TYPE_LABELS[payType]}`,
-      operatorFromSession(auth.session),
-    ),
+    formatSaleTelegramMessage({
+      carBrand: fullSale!.client.carBrand,
+      licensePlate: fullSale!.client.licensePlate,
+      quantity: fullSale!.quantity,
+      pricePerUnit: fullSale!.pricePerUnit,
+      totalPrice: fullSale!.totalPrice,
+      paymentLabel: PAYMENT_TYPE_LABELS[payType],
+      operator: operatorFromSession(auth.session),
+    }),
   );
 
   const paid = await getSaleDebtPaid(sale.id);

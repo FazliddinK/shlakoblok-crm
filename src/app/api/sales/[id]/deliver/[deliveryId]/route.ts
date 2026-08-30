@@ -1,24 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
-import { archiveRecord, enrichSaleDelivery, getSaleDebtPaid, saleInclude } from "@/lib/finance";
+import {
+  archiveRecord,
+  enrichSaleDelivery,
+  getSaleDebtPaid,
+  recalculateClientBalance,
+  saleInclude,
+} from "@/lib/finance";
 import { logChange } from "@/lib/audit";
-import { sendTelegramMessage, formatTelegramMessage, operatorFromSession } from "@/lib/telegram";
+import {
+  formatTelegramMessage,
+  operatorFromSession,
+  sendTelegramMessage,
+} from "@/lib/telegram";
 
 type Params = { params: Promise<{ id: string; deliveryId: string }> };
 
 async function getDeliveryContext(deliveryId: string) {
-  const delivery = await prisma.goodsDelivery.findUnique({
+  return prisma.goodsDelivery.findUnique({
     where: { id: deliveryId },
     include: {
       sale: { include: { client: true, goodsDeliveries: true } },
       user: { select: { displayName: true } },
     },
   });
-  return delivery;
 }
 
-function getRemainingForSale(sale: { quantity: number; goodsDeliveries: { id: string; quantity: number }[] }, excludeId?: string) {
+function getRemainingForSale(
+  sale: { quantity: number; goodsDeliveries: { id: string; quantity: number }[] },
+  excludeId?: string,
+) {
   const delivered = sale.goodsDeliveries
     .filter((item) => item.id !== excludeId)
     .reduce((sum, item) => sum + item.quantity, 0);
@@ -71,6 +83,8 @@ export async function PUT(request: NextRequest, { params }: Params) {
     data: newData,
   });
 
+  await recalculateClientBalance(delivery.sale.clientId);
+
   await sendTelegramMessage(
     formatTelegramMessage(
       "изменение",
@@ -110,6 +124,7 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
   );
 
   await prisma.goodsDelivery.delete({ where: { id: delivery.id } });
+  await recalculateClientBalance(delivery.sale.clientId);
 
   await sendTelegramMessage(
     formatTelegramMessage(

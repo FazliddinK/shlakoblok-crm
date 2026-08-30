@@ -3,12 +3,44 @@ import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import {
   enrichSaleDelivery,
+  getFinanceSummary,
   getSaleDebtPaid,
+  recalculateClientBalance,
   saleInclude,
 } from "@/lib/finance";
-import { sendTelegramMessage, formatTelegramMessage, operatorFromSession } from "@/lib/telegram";
+import { logChange } from "@/lib/audit";
+import {
+  formatDeliveryTelegramMessage,
+  operatorFromSession,
+  sendTelegramMessage,
+} from "@/lib/telegram";
 
 type Params = { params: Promise<{ id: string }> };
+
+async function notifyDelivery(
+  sale: {
+    client: { carBrand: string; licensePlate: string };
+    quantity: number;
+    pricePerUnit: number;
+  },
+  deliveredNow: number,
+  enriched: ReturnType<typeof enrichSaleDelivery>,
+  operator: ReturnType<typeof operatorFromSession>,
+) {
+  await sendTelegramMessage(
+    formatDeliveryTelegramMessage({
+      carBrand: sale.client.carBrand,
+      licensePlate: sale.client.licensePlate,
+      deliveredNow,
+      totalPurchased: sale.quantity,
+      totalDelivered: enriched.deliveredQuantity,
+      remaining: enriched.remainingQuantity,
+      prepaymentRemaining: enriched.prepaymentRemainingAmount,
+      operator,
+      fullyClosed: enriched.remainingQuantity === 0,
+    }),
+  );
+}
 
 export async function POST(request: NextRequest, { params }: Params) {
   const auth = await requireAuth();
@@ -65,15 +97,15 @@ export async function POST(request: NextRequest, { params }: Params) {
     include: { user: { select: { displayName: true } } },
   });
 
-  await sendTelegramMessage(
-    formatTelegramMessage(
-      "создание",
-      "Выдача товара",
-      `🚗 ${sale.client.carBrand} (${licensePlate})\n` +
-        `📦 ${quantity} шт из ${sale.quantity}\n` +
-        `📝 ${note || "—"}`,
-      operatorFromSession(auth.session),
-    ),
+  await recalculateClientBalance(sale.clientId);
+
+  await logChange(
+    "goods_delivery",
+    delivery.id,
+    `${sale.client.licensePlate}: выдача ${quantity} шт`,
+    {},
+    delivery,
+    auth.session.userId,
   );
 
   const updated = await prisma.sale.findUnique({
@@ -81,12 +113,15 @@ export async function POST(request: NextRequest, { params }: Params) {
     include: saleInclude,
   });
 
+  const enriched = enrichSaleDelivery(updated!);
+  const operator = operatorFromSession(auth.session);
+
+  await notifyDelivery(sale, quantity, enriched, operator);
+
   const paid = await getSaleDebtPaid(id);
-  return NextResponse.json(
-    enrichSaleDelivery({
-      ...updated!,
-      debtPaid: paid,
-      debtRemaining: 0,
-    }),
-  );
+  return NextResponse.json({
+    ...enriched,
+    debtPaid: paid,
+    debtRemaining: 0,
+  });
 }

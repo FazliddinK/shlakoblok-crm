@@ -57,6 +57,61 @@ export function formatTelegramMessage(
   );
 }
 
+export function formatSaleTelegramMessage(params: {
+  carBrand: string;
+  licensePlate: string;
+  quantity: number;
+  pricePerUnit: number;
+  totalPrice: number;
+  paymentLabel: string;
+  operator: TelegramOperator;
+}) {
+  return (
+    `🧱 <b>Новая продажа</b>\n\n` +
+    `Клиент: ${params.carBrand} / ${params.licensePlate}\n` +
+    `Количество: ${params.quantity} шт\n` +
+    `Цена: ${params.pricePerUnit.toLocaleString("ru-RU")} сум\n` +
+    `Сумма: ${params.totalPrice.toLocaleString("ru-RU")} сум\n` +
+    `Оплата: ${params.paymentLabel}\n\n` +
+    `👤 ${params.operator.displayName}`
+  );
+}
+
+export function formatDeliveryTelegramMessage(params: {
+  carBrand: string;
+  licensePlate: string;
+  deliveredNow: number;
+  totalPurchased: number;
+  totalDelivered: number;
+  remaining: number;
+  prepaymentRemaining: number;
+  operator: TelegramOperator;
+  fullyClosed?: boolean;
+}) {
+  if (params.fullyClosed) {
+    return (
+      `✅ <b>Предоплата полностью закрыта</b>\n\n` +
+      `Клиент: ${params.carBrand} / ${params.licensePlate}\n` +
+      `Всего: ${params.totalPurchased} шт\n` +
+      `Выдано: ${params.totalDelivered} шт\n` +
+      `Остаток: 0\n` +
+      `Остаток предоплаты: 0 сум\n\n` +
+      `👤 ${params.operator.displayName}`
+    );
+  }
+
+  return (
+    `🚚 <b>Выдача товара</b>\n\n` +
+    `Клиент: ${params.carBrand} / ${params.licensePlate}\n` +
+    `Выдано сейчас: ${params.deliveredNow} шт\n` +
+    `Всего оплачено: ${params.totalPurchased} шт\n` +
+    `Всего выдано: ${params.totalDelivered} шт\n` +
+    `Осталось: ${params.remaining} шт\n` +
+    `Остаток предоплаты: ${params.prepaymentRemaining.toLocaleString("ru-RU")} сум\n\n` +
+    `👤 ${params.operator.displayName}`
+  );
+}
+
 export function operatorFromSession(session: {
   displayName: string;
   username: string;
