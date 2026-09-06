@@ -41,6 +41,7 @@ export function resolveDateRange(
 }
 
 export const REPORT_PERIOD_LABELS: Record<string, string> = {
+  last7: "Последние 7 дней",
   today: "Сегодня",
   yesterday: "Вчера",
   week: "Эта неделя",
@@ -67,6 +68,15 @@ export function resolveReportPeriod(
   const today = todayDateString();
 
   switch (period) {
+    case "last7": {
+      const start = new Date(now);
+      start.setDate(start.getDate() - 6);
+      return {
+        from: formatDateString(start),
+        to: today,
+        label: labels.last7 ?? "Последние 7 дней",
+      };
+    }
     case "yesterday": {
       const y = new Date(now);
       y.setDate(y.getDate() - 1);

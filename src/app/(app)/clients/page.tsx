@@ -161,28 +161,37 @@ export default function ClientsPage() {
   async function downloadAct(allTime: boolean) {
     if (!actClient) return;
     setActLoading(true);
-    const params = new URLSearchParams();
-    if (!allTime) {
-      if (actFrom) params.set("from", actFrom);
-      if (actTo) params.set("to", actTo);
-    }
-    const res = await fetch(
-      `/api/clients/${actClient.id}/reconciliation?${params}`,
-    );
-    setActLoading(false);
-    if (!res.ok) {
+    try {
+      const params = new URLSearchParams();
+      if (!allTime) {
+        if (actFrom) params.set("from", actFrom);
+        if (actTo) params.set("to", actTo);
+      }
+      const res = await fetch(
+        `/api/clients/${actClient.id}/reconciliation?${params}`,
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        alert(err?.error || "Не удалось сформировать акт сверки");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download =
+        res.headers.get("Content-Disposition")?.match(/filename="([^"]+)"/)?.[1] ??
+        `akt_sverki_${actClient.licensePlate}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setActOpen(false);
+    } catch {
       alert("Не удалось сформировать акт сверки");
-      return;
+    } finally {
+      setActLoading(false);
     }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download =
-      res.headers.get("Content-Disposition")?.match(/filename="(.+)"/)?.[1] ??
-      `akt_sverki_${actClient.licensePlate}.xlsx`;
-    a.click();
-    URL.revokeObjectURL(url);
   }
 
   if (loading) {

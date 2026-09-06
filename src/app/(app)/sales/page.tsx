@@ -634,7 +634,7 @@ export default function SalesPage() {
       </Dialog>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[92vh] w-[calc(100vw-2rem)] max-w-[62rem] overflow-y-auto">
+        <DialogContent className="max-h-[92vh] w-[calc(100vw-1.5rem)] max-w-[72rem] overflow-y-auto sm:max-w-[72rem]">
           <DialogHeader>
             <DialogTitle>{editing ? "Редактировать продажу" : "Новая продажа"}</DialogTitle>
           </DialogHeader>
