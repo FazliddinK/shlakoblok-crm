@@ -2,28 +2,19 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+/** Денежный баланс: >0 клиент должен нам, <0 у клиента предоплата (переплата). */
 async function recalculateClientBalance(clientId: string): Promise<number> {
   const sales = await prisma.sale.findMany({
     where: { clientId },
-    include: {
-      debtPayments: true,
-      goodsDeliveries: true,
-    },
+    include: { debtPayments: true },
   });
 
   let balance = 0;
-
   for (const sale of sales) {
-    if (sale.paymentType === "debt") {
-      balance += sale.totalPrice;
-      for (const payment of sale.debtPayments) {
-        balance -= payment.amount;
-      }
-    } else if (sale.paymentType === "prepayment") {
-      balance -= sale.totalPrice;
-      for (const delivery of sale.goodsDeliveries) {
-        balance += delivery.quantity * sale.pricePerUnit;
-      }
+    const paidNow = sale.paidAmount ?? 0;
+    balance += sale.totalPrice - paidNow;
+    for (const payment of sale.debtPayments) {
+      balance -= payment.amount;
     }
   }
 
