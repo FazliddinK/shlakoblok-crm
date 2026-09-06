@@ -7,7 +7,6 @@ import {
   Trash2,
   Search,
   Printer,
-  Banknote,
   Package,
   Eye,
   History,
@@ -37,7 +36,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatCurrency, formatDateTime } from "@/lib/labels";
-import { PAYMENT_TYPE_LABELS, SALES_PERIOD_LABELS } from "@/lib/constants";
+import { SALES_PERIOD_LABELS } from "@/lib/constants";
 import { todayDateString } from "@/lib/dates";
 import { printReceipt, type SaleWithRelations } from "@/components/sales/receipt";
 
@@ -62,16 +61,9 @@ interface SaleRow extends SaleWithRelations {
   debtRemaining?: number;
   deliveredQuantity?: number;
   remainingQuantity?: number;
-  paidAmount?: number;
   prepaymentRemainingAmount?: number;
   goodsDeliveries?: GoodsDeliveryRow[];
 }
-
-const PAYMENT_OPTIONS = [
-  { value: "paid", label: PAYMENT_TYPE_LABELS.paid },
-  { value: "debt", label: PAYMENT_TYPE_LABELS.debt },
-  { value: "prepayment", label: PAYMENT_TYPE_LABELS.prepayment },
-];
 
 const PERIOD_OPTIONS = Object.entries(SALES_PERIOD_LABELS).map(([value, label]) => ({
   value,
@@ -94,11 +86,8 @@ export default function SalesPage() {
   const [open, setOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailSale, setDetailSale] = useState<SaleRow | null>(null);
-  const [repayOpen, setRepayOpen] = useState(false);
   const [deliverOpen, setDeliverOpen] = useState(false);
   const [actionSale, setActionSale] = useState<SaleRow | null>(null);
-  const [repayAmount, setRepayAmount] = useState("");
-  const [repayNote, setRepayNote] = useState("");
   const [deliverQty, setDeliverQty] = useState("");
   const [deliverPlate, setDeliverPlate] = useState("");
   const [deliverNote, setDeliverNote] = useState("");
@@ -114,8 +103,8 @@ export default function SalesPage() {
     quantity: "",
     pricePerUnit: "85",
     totalPrice: "",
+    paidAmount: "",
     notes: "",
-    paymentType: "paid",
     initialDeliveryQuantity: "",
     initialDeliveryPlate: "",
   });
@@ -190,8 +179,8 @@ export default function SalesPage() {
       quantity: "",
       pricePerUnit: "85",
       totalPrice: "",
+      paidAmount: "",
       notes: "",
-      paymentType: "paid",
       initialDeliveryQuantity: "",
       initialDeliveryPlate: "",
     });
@@ -210,7 +199,7 @@ export default function SalesPage() {
       pricePerUnit: String(sale.pricePerUnit),
       totalPrice: String(sale.totalPrice),
       notes: sale.notes,
-      paymentType: sale.paymentType ?? "paid",
+      paidAmount: String(sale.paidAmount ?? sale.totalPrice),
       initialDeliveryQuantity: "",
       initialDeliveryPlate: sale.client.licensePlate,
     });
@@ -232,8 +221,8 @@ export default function SalesPage() {
           quantity: Number(form.quantity),
           pricePerUnit: Number(form.pricePerUnit),
           totalPrice: total,
+          paidAmount: Number(form.paidAmount),
           notes: form.notes,
-          paymentType: form.paymentType,
         }
       : {
           clientId: mode === "existing" ? form.clientId : undefined,
@@ -243,14 +232,13 @@ export default function SalesPage() {
           quantity: Number(form.quantity),
           pricePerUnit: Number(form.pricePerUnit),
           totalPrice: total,
+          paidAmount: Number(form.paidAmount),
           notes: form.notes,
-          paymentType: form.paymentType,
           initialDeliveryQuantity:
-            form.paymentType === "prepayment"
-              ? Number(form.initialDeliveryQuantity) || 0
-              : undefined,
-          initialDeliveryPlate:
-            form.paymentType === "prepayment" ? form.initialDeliveryPlate : undefined,
+            form.initialDeliveryQuantity === ""
+              ? undefined
+              : Number(form.initialDeliveryQuantity),
+          initialDeliveryPlate: form.initialDeliveryPlate || undefined,
         };
 
     const res = await fetch(editing ? `/api/sales/${editing.id}` : "/api/sales", {
@@ -271,24 +259,6 @@ export default function SalesPage() {
     if (!confirm("Удалить продажу?")) return;
     await fetch(`/api/sales/${id}`, { method: "DELETE" });
     load();
-  }
-
-  async function handleRepay(full: boolean) {
-    if (!actionSale) return;
-    setActionError("");
-    const amount = full ? actionSale.debtRemaining ?? 0 : Number(repayAmount);
-    const res = await fetch(`/api/sales/${actionSale.id}/repay`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount, note: repayNote }),
-    });
-    const data = await res.json();
-    if (res.ok) {
-      setRepayOpen(false);
-      load();
-    } else {
-      setActionError(data.error || "Ошибка погашения");
-    }
   }
 
   async function handleDeliver() {
@@ -320,22 +290,6 @@ export default function SalesPage() {
       const res = await fetch(`/api/sales/${saleId}`);
       if (res.ok) setDetailSale(await res.json());
     }
-  }
-
-  function renderPaymentBadge(sale: SaleRow) {
-    return (
-      <Badge
-        variant={
-          sale.paymentType === "debt"
-            ? "destructive"
-            : sale.paymentType === "prepayment"
-              ? "secondary"
-              : "outline"
-        }
-      >
-        {PAYMENT_TYPE_LABELS[sale.paymentType] ?? PAYMENT_TYPE_LABELS.paid}
-      </Badge>
-    );
   }
 
   function renderPendingTable(items: SaleRow[]) {
@@ -424,7 +378,6 @@ export default function SalesPage() {
               <TableHead>Дата</TableHead>
               <TableHead>Клиент</TableHead>
               <TableHead className="hidden md:table-cell">Гос. номер</TableHead>
-              <TableHead>Оплата</TableHead>
               <TableHead>Куплено</TableHead>
               <TableHead>Выдано</TableHead>
               <TableHead>Осталось</TableHead>
@@ -442,7 +395,6 @@ export default function SalesPage() {
                 <TableCell className="hidden md:table-cell font-mono">
                   {sale.client.licensePlate}
                 </TableCell>
-                <TableCell>{renderPaymentBadge(sale)}</TableCell>
                 <TableCell>{sale.quantity} шт</TableCell>
                 <TableCell>{sale.deliveredQuantity ?? sale.quantity} шт</TableCell>
                 <TableCell>
@@ -474,22 +426,6 @@ export default function SalesPage() {
                         }}
                       >
                         <Package className="h-4 w-4 text-orange-600" />
-                      </Button>
-                    )}
-                    {(sale.debtRemaining ?? 0) > 0 && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        title="Погашение долга"
-                        onClick={() => {
-                          setActionSale(sale);
-                          setRepayAmount(String(sale.debtRemaining));
-                          setRepayNote("");
-                          setActionError("");
-                          setRepayOpen(true);
-                        }}
-                      >
-                        <Banknote className="h-4 w-4 text-green-600" />
                       </Button>
                     )}
                     <Button variant="ghost" size="icon" title="Детали" onClick={() => openDetails(sale)}>
@@ -634,44 +570,6 @@ export default function SalesPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={repayOpen} onOpenChange={setRepayOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Погашение долга</DialogTitle>
-          </DialogHeader>
-          {actionSale && (
-            <div className="space-y-4 py-2">
-              <p className="text-sm">
-                Остаток долга:{" "}
-                <span className="font-semibold text-red-600">
-                  {formatCurrency(actionSale.debtRemaining ?? 0)}
-                </span>
-              </p>
-              <div className="grid gap-2">
-                <Label>Сумма погашения, сум</Label>
-                <Input
-                  type="number"
-                  value={repayAmount}
-                  onChange={(e) => setRepayAmount(e.target.value)}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label>Примечание</Label>
-                <Textarea value={repayNote} onChange={(e) => setRepayNote(e.target.value)} />
-              </div>
-              {actionError && <p className="text-sm text-red-600">{actionError}</p>}
-            </div>
-          )}
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setRepayOpen(false)}>Отмена</Button>
-            <Button variant="outline" onClick={() => handleRepay(false)}>Частично</Button>
-            <Button className="bg-green-600 hover:bg-green-700" onClick={() => handleRepay(true)}>
-              Погасить полностью
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -685,12 +583,12 @@ export default function SalesPage() {
               <div className="grid gap-2 rounded-lg bg-zinc-50 p-4 text-sm sm:grid-cols-2">
                 <p><span className="text-zinc-500">Клиент:</span> {detailSale.client.carBrand}</p>
                 <p><span className="text-zinc-500">Гос. номер:</span> {detailSale.client.licensePlate}</p>
-                <p><span className="text-zinc-500">Оплата:</span> {PAYMENT_TYPE_LABELS[detailSale.paymentType]}</p>
+                <p><span className="text-zinc-500">Оплачено:</span> {formatCurrency(detailSale.paidAmount ?? detailSale.totalPrice)}</p>
                 <p><span className="text-zinc-500">Куплено:</span> {detailSale.quantity} шт</p>
                 <p><span className="text-zinc-500">Выдано:</span> {detailSale.deliveredQuantity ?? 0} шт</p>
                 <p><span className="text-zinc-500">Осталось:</span> {detailSale.remainingQuantity ?? 0} шт</p>
                 <p><span className="text-zinc-500">Цена/шт:</span> {formatCurrency(detailSale.pricePerUnit)}</p>
-                <p><span className="text-zinc-500">Оплачено:</span> {formatCurrency(detailSale.totalPrice)}</p>
+                <p><span className="text-zinc-500">Сумма продажи:</span> {formatCurrency(detailSale.totalPrice)}</p>
               </div>
 
               <div>
@@ -736,7 +634,7 @@ export default function SalesPage() {
       </Dialog>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto sm:max-w-3xl">
+        <DialogContent className="max-h-[92vh] w-[calc(100vw-2rem)] max-w-[62rem] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? "Редактировать продажу" : "Новая продажа"}</DialogTitle>
           </DialogHeader>
@@ -839,10 +737,12 @@ export default function SalesPage() {
                   value={form.quantity}
                   onChange={(e) => {
                     const qty = e.target.value;
+                    const total = recalcTotal(qty, form.pricePerUnit);
                     setForm({
                       ...form,
                       quantity: qty,
-                      totalPrice: recalcTotal(qty, form.pricePerUnit),
+                      totalPrice: total,
+                      paidAmount: editing ? form.paidAmount : (form.paidAmount || total),
                     });
                   }}
                 />
@@ -855,10 +755,12 @@ export default function SalesPage() {
                   value={form.pricePerUnit}
                   onChange={(e) => {
                     const price = e.target.value;
+                    const total = recalcTotal(form.quantity, price);
                     setForm({
                       ...form,
                       pricePerUnit: price,
-                      totalPrice: recalcTotal(form.quantity, price),
+                      totalPrice: total,
+                      paidAmount: editing ? form.paidAmount : (form.paidAmount || total),
                     });
                   }}
                 />
@@ -875,24 +777,43 @@ export default function SalesPage() {
               </div>
             </div>
 
-            <div className="grid gap-2">
-              <Label>Тип оплаты *</Label>
-              <LabeledSelect
-                value={form.paymentType}
-                onValueChange={(value) => setForm({ ...form, paymentType: value })}
-                options={PAYMENT_OPTIONS}
-                triggerClassName="w-full"
-              />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label>Реально оплаченная сумма, сум *</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={form.paidAmount}
+                  onChange={(e) => setForm({ ...form, paidAmount: e.target.value })}
+                  placeholder="Сколько клиент заплатил сейчас"
+                  className="font-semibold"
+                  required
+                />
+                <p className="text-xs text-zinc-500">
+                  Это приход денег в кассу. Долг или предоплата считаются в карточке клиента.
+                </p>
+              </div>
+              <div className="rounded-lg bg-zinc-50 p-3 text-sm">
+                <p>Итого по товару: <b>{form.totalPrice || "0"} сум</b></p>
+                <p className="mt-1">
+                  {Number(form.paidAmount || 0) < Number(form.totalPrice || 0)
+                    ? `Долг клиента: ${Number(form.totalPrice || 0) - Number(form.paidAmount || 0)} сум`
+                    : Number(form.paidAmount || 0) > Number(form.totalPrice || 0)
+                      ? `Предоплата/переплата: ${Number(form.paidAmount || 0) - Number(form.totalPrice || 0)} сум`
+                      : "Оплачено полностью"}
+                </p>
+              </div>
             </div>
 
-            {!editing && form.paymentType === "prepayment" && (
+            {!editing && (
               <div className="grid gap-4 rounded-lg border border-orange-200 bg-orange-50 p-4 sm:grid-cols-2">
                 <div className="sm:col-span-2">
                   <p className="text-sm font-medium text-orange-900">
-                    Первичная выдача (необязательно)
+                    Выдача товара сейчас (необязательно)
                   </p>
                   <p className="text-xs text-orange-800">
-                    Если клиент забирает часть товара сразу, укажите количество и гос. номер.
+                    Если оставить пустым — при долге выдаётся весь товар, при полной оплате тоже весь.
+                    Укажите меньше купленного, если клиент забирает частями (остаток — во вкладке «Остатки клиентов»).
                   </p>
                 </div>
                 <div className="grid gap-2">

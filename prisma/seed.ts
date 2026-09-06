@@ -67,6 +67,7 @@ async function main() {
         quantity: 500,
         pricePerUnit: 85000,
         totalPrice: 42500000,
+        paidAmount: 42500000,
         paymentType: "paid",
         userId: admin.id,
         notes: "Самовывоз",
@@ -76,16 +77,15 @@ async function main() {
         quantity: 1200,
         pricePerUnit: 82000,
         totalPrice: 98400000,
+        paidAmount: 0,
         paymentType: "debt",
         userId: admin.id,
       },
     ],
   });
 
-  await prisma.client.update({
-    where: { id: client2.id },
-    data: { balance: 98400000 },
-  });
+  const { recalculateAllClientBalances } = await import("../src/lib/finance");
+  await recalculateAllClientBalances();
 
   await prisma.expense.create({
     data: {

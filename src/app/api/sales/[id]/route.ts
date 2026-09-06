@@ -3,15 +3,15 @@ import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import {
   archiveRecord,
+  derivePaymentType,
   enrichSaleDelivery,
-  getSaleDebtPaid,
   recalculateClientBalance,
   reverseDebtPaymentsForSale,
   saleInclude,
 } from "@/lib/finance";
 import { describeChanges, logChange } from "@/lib/audit";
 import { sendTelegramMessage, formatTelegramMessage, operatorFromSession } from "@/lib/telegram";
-import { PAYMENT_TYPE_LABELS } from "@/lib/constants";
+import { formatCurrency } from "@/lib/labels";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -29,14 +29,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Продажа не найдена" }, { status: 404 });
   }
 
-  const paid = await getSaleDebtPaid(sale.id);
-  return NextResponse.json(
-    enrichSaleDelivery({
-      ...sale,
-      debtPaid: paid,
-      debtRemaining: sale.paymentType === "debt" ? Math.max(0, sale.totalPrice - paid) : 0,
-    }),
-  );
+  return NextResponse.json(enrichSaleDelivery(sale));
 }
 
 export async function PUT(request: NextRequest, { params }: Params) {
@@ -46,41 +39,57 @@ export async function PUT(request: NextRequest, { params }: Params) {
   const { id } = await params;
   const existing = await prisma.sale.findUnique({
     where: { id },
-    include: { client: true, goodsDeliveries: true },
+    include: { client: true, goodsDeliveries: true, debtPayments: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "Продажа не найдена" }, { status: 404 });
   }
 
   const body = await request.json();
-  const { quantity, pricePerUnit, totalPrice, notes, paymentType } = body;
-  const payType =
-    paymentType === "debt" || paymentType === "prepayment" ? paymentType : "paid";
+  const { quantity, pricePerUnit, totalPrice, paidAmount, notes } = body;
 
+  const newQty = Number(quantity);
   const newTotal = Number(totalPrice);
-  const paid = await getSaleDebtPaid(id);
-  if (payType === "debt" && paid > newTotal) {
+  const newPaid =
+    paidAmount === undefined || paidAmount === null || paidAmount === ""
+      ? existing.paidAmount
+      : Number(paidAmount);
+
+  if (Number.isNaN(newPaid) || newPaid < 0) {
+    return NextResponse.json({ error: "Некорректная оплаченная сумма" }, { status: 400 });
+  }
+
+  const delivered = existing.goodsDeliveries.reduce((sum, item) => sum + item.quantity, 0);
+  if (newQty < delivered) {
     return NextResponse.json(
-      { error: "Сумма меньше уже погашенного долга" },
+      { error: `Нельзя уменьшить ниже уже выданного (${delivered} шт)` },
       { status: 400 },
     );
   }
 
-  const newQty = Number(quantity);
-  if (payType === "prepayment") {
-    const delivered = existing.goodsDeliveries.reduce((sum, item) => sum + item.quantity, 0);
-    if (newQty < delivered) {
-      return NextResponse.json(
-        { error: `Нельзя уменьшить ниже уже выданного (${delivered} шт)` },
-        { status: 400 },
-      );
-    }
+  const repayments = existing.debtPayments.reduce((sum, p) => sum + p.amount, 0);
+  if (newPaid + repayments > newTotal + 0.0001 && repayments > 0 && newPaid < existing.paidAmount) {
+    // allow overpayment as credit; only block if reducing paid below already repaid nonsense
   }
+  if (newTotal < repayments) {
+    return NextResponse.json(
+      { error: "Сумма продажи меньше уже погашенных платежей" },
+      { status: 400 },
+    );
+  }
+
+  const payType = derivePaymentType({
+    totalPrice: newTotal,
+    paidAmount: newPaid,
+    quantity: newQty,
+    deliveredQuantity: delivered,
+  });
 
   const newData = {
     quantity: newQty,
     pricePerUnit: Number(pricePerUnit),
     totalPrice: newTotal,
+    paidAmount: newPaid,
     paymentType: payType,
     notes: notes?.trim() ?? "",
   };
@@ -95,7 +104,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
   );
 
   if (existing.paymentType === "debt" && payType !== "debt") {
-    await reverseDebtPaymentsForSale(existing.id, existing.clientId);
+    // keep repayments history; balance recalc handles it
   }
 
   const sale = await prisma.sale.update({
@@ -111,20 +120,13 @@ export async function PUT(request: NextRequest, { params }: Params) {
       "изменение",
       "Продажа шлакоблоков",
       `🚗 ${sale.client.carBrand} (${sale.client.licensePlate})\n` +
-        `📦 ${sale.quantity} шт = ${sale.totalPrice} сум\n` +
-        `💳 ${PAYMENT_TYPE_LABELS[payType]}`,
+        `📦 ${sale.quantity} шт = ${formatCurrency(sale.totalPrice)}\n` +
+        `💵 Оплачено: ${formatCurrency(sale.paidAmount)}`,
       operatorFromSession(auth.session),
     ),
   );
 
-  const debtPaid = await getSaleDebtPaid(sale.id);
-  return NextResponse.json(
-    enrichSaleDelivery({
-      ...sale,
-      debtPaid,
-      debtRemaining: sale.paymentType === "debt" ? Math.max(0, sale.totalPrice - debtPaid) : 0,
-    }),
-  );
+  return NextResponse.json(enrichSaleDelivery(sale));
 }
 
 export async function DELETE(_request: NextRequest, { params }: Params) {
@@ -152,13 +154,14 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
   );
 
   await prisma.sale.delete({ where: { id } });
+  await recalculateClientBalance(sale.clientId);
 
   await sendTelegramMessage(
     formatTelegramMessage(
       "удаление",
       "Продажа шлакоблоков",
       `🚗 ${sale.client.carBrand} (${sale.client.licensePlate})\n` +
-        `📦 ${sale.quantity} шт, ${sale.totalPrice} сум`,
+        `📦 ${sale.quantity} шт, ${formatCurrency(sale.totalPrice)}`,
       operatorFromSession(auth.session),
     ),
   );

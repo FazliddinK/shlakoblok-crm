@@ -19,28 +19,19 @@ export async function archiveRecord(
   });
 }
 
+/** Денежный баланс: >0 клиент должен нам, <0 у клиента предоплата (переплата). */
 export async function recalculateClientBalance(clientId: string): Promise<number> {
   const sales = await prisma.sale.findMany({
     where: { clientId },
-    include: {
-      debtPayments: true,
-      goodsDeliveries: true,
-    },
+    include: { debtPayments: true },
   });
 
   let balance = 0;
-
   for (const sale of sales) {
-    if (sale.paymentType === "debt") {
-      balance += sale.totalPrice;
-      for (const payment of sale.debtPayments) {
-        balance -= payment.amount;
-      }
-    } else if (sale.paymentType === "prepayment") {
-      balance -= sale.totalPrice;
-      for (const delivery of sale.goodsDeliveries) {
-        balance += delivery.quantity * sale.pricePerUnit;
-      }
+    const paidNow = sale.paidAmount ?? 0;
+    balance += sale.totalPrice - paidNow;
+    for (const payment of sale.debtPayments) {
+      balance -= payment.amount;
     }
   }
 
@@ -59,21 +50,25 @@ export async function recalculateAllClientBalances() {
   }
 }
 
-/** @deprecated use recalculateClientBalance after mutations */
-export async function reverseSaleEffects(sale: {
-  clientId: string;
+export function derivePaymentType(params: {
   totalPrice: number;
-  paymentType: string;
-}) {
+  paidAmount: number;
+  quantity: number;
+  deliveredQuantity: number;
+}): "paid" | "debt" | "prepayment" {
+  const { totalPrice, paidAmount, quantity, deliveredQuantity } = params;
+  if (paidAmount + 0.0001 < totalPrice) return "debt";
+  if (deliveredQuantity < quantity) return "prepayment";
+  return "paid";
+}
+
+/** @deprecated */
+export async function reverseSaleEffects(sale: { clientId: string }) {
   await recalculateClientBalance(sale.clientId);
 }
 
-/** @deprecated use recalculateClientBalance after mutations */
-export async function applySaleEffects(sale: {
-  clientId: string;
-  totalPrice: number;
-  paymentType: string;
-}) {
+/** @deprecated */
+export async function applySaleEffects(sale: { clientId: string }) {
   await recalculateClientBalance(sale.clientId);
 }
 
@@ -81,10 +76,12 @@ export type SaleWithDeliveries = {
   id: string;
   quantity: number;
   totalPrice: number;
+  paidAmount?: number;
   pricePerUnit: number;
   paymentType: string;
   createdAt?: Date | string;
   goodsDeliveries?: { quantity: number }[];
+  debtPayments?: { amount: number }[];
   client?: { carBrand: string; licensePlate: string; id?: string };
 };
 
@@ -103,23 +100,38 @@ export function getDeliveredQuantity(sale: SaleWithDeliveries): number {
   return sale.quantity;
 }
 
+export function getSaleMoneyDebt(sale: {
+  totalPrice: number;
+  paidAmount?: number;
+  debtPayments?: { amount: number }[];
+}): number {
+  const paidAtSale = sale.paidAmount ?? 0;
+  const repayments = sale.debtPayments?.reduce((sum, p) => sum + p.amount, 0) ?? 0;
+  return Math.max(0, sale.totalPrice - paidAtSale - repayments);
+}
+
 export function enrichSaleDelivery<T extends SaleWithDeliveries>(
   sale: T,
 ): T & {
   deliveredQuantity: number;
   remainingQuantity: number;
   paidAmount: number;
+  debtRemaining: number;
+  debtPaid: number;
   prepaymentRemainingAmount: number;
   totalQuantity: number;
   unitPrice: number;
   totalAmount: number;
 } {
   const deliveredQuantity = getDeliveredQuantity(sale);
-  const remainingQuantity =
+  const remaining =
     sale.paymentType === "prepayment"
       ? Math.max(0, sale.quantity - deliveredQuantity)
       : 0;
-  const prepaymentRemainingAmount = remainingQuantity * sale.pricePerUnit;
+
+  const paidAtSale = sale.paidAmount ?? (sale.paymentType === "debt" ? 0 : sale.totalPrice);
+  const repayments = sale.debtPayments?.reduce((sum, p) => sum + p.amount, 0) ?? 0;
+  const debtRemaining = Math.max(0, sale.totalPrice - paidAtSale - repayments);
 
   return {
     ...sale,
@@ -127,9 +139,11 @@ export function enrichSaleDelivery<T extends SaleWithDeliveries>(
     unitPrice: sale.pricePerUnit,
     totalAmount: sale.totalPrice,
     deliveredQuantity,
-    remainingQuantity,
-    paidAmount: sale.totalPrice,
-    prepaymentRemainingAmount,
+    remainingQuantity: remaining,
+    paidAmount: paidAtSale,
+    debtPaid: repayments,
+    debtRemaining,
+    prepaymentRemainingAmount: remaining * sale.pricePerUnit,
   };
 }
 
@@ -144,11 +158,12 @@ export async function getSaleDebtPaid(saleId: string): Promise<number> {
 export async function getSaleDebtRemaining(sale: {
   id: string;
   totalPrice: number;
+  paidAmount?: number;
   paymentType: string;
 }): Promise<number> {
-  if (sale.paymentType !== "debt") return 0;
-  const paid = await getSaleDebtPaid(sale.id);
-  return Math.max(0, sale.totalPrice - paid);
+  const paidAtSale = sale.paidAmount ?? (sale.paymentType === "debt" ? 0 : sale.totalPrice);
+  const repayments = await getSaleDebtPaid(sale.id);
+  return Math.max(0, sale.totalPrice - paidAtSale - repayments);
 }
 
 export async function reverseDebtPaymentsForSale(saleId: string, clientId: string) {
@@ -166,9 +181,59 @@ export async function applyDebtPayment(
   const payment = await prisma.debtPayment.create({
     data: { saleId, amount, userId, note },
   });
-
   await recalculateClientBalance(clientId);
   return payment;
+}
+
+/** Погашение долга клиента (FIFO по продажам с остатком). */
+export async function applyClientDebtRepayment(
+  clientId: string,
+  amount: number,
+  userId: string,
+  note = "",
+) {
+  if (amount <= 0) throw new Error("Сумма должна быть больше 0");
+
+  const sales = await prisma.sale.findMany({
+    where: { clientId },
+    include: { debtPayments: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const openDebts = sales
+    .map((sale) => ({
+      sale,
+      remaining: getSaleMoneyDebt(sale),
+    }))
+    .filter((item) => item.remaining > 0);
+
+  const totalDebt = openDebts.reduce((sum, item) => sum + item.remaining, 0);
+  if (totalDebt <= 0) {
+    throw new Error("У клиента нет долга");
+  }
+  if (amount > totalDebt + 0.0001) {
+    throw new Error(`Максимальная сумма погашения: ${totalDebt}`);
+  }
+
+  let left = amount;
+  const created = [];
+  for (const item of openDebts) {
+    if (left <= 0) break;
+    const pay = Math.min(left, item.remaining);
+    const payment = await prisma.debtPayment.create({
+      data: {
+        saleId: item.sale.id,
+        amount: pay,
+        userId,
+        note,
+      },
+    });
+    created.push(payment);
+    left -= pay;
+  }
+
+  const balance = await recalculateClientBalance(clientId);
+  return { payments: created, balance, applied: amount - left };
 }
 
 export async function getFinanceSummary() {
@@ -190,17 +255,12 @@ export async function getFinanceSummary() {
     include: {
       client: true,
       goodsDeliveries: true,
+      debtPayments: true,
     },
     orderBy: { createdAt: "desc" },
   });
 
-  const cashFromSales = sales.reduce((sum, sale) => {
-    if (sale.paymentType === "paid" || sale.paymentType === "prepayment") {
-      return sum + sale.totalPrice;
-    }
-    return sum;
-  }, 0);
-
+  const cashFromSales = sales.reduce((sum, sale) => sum + (sale.paidAmount ?? 0), 0);
   const cashFromRepayments = debtPayments.reduce((sum, p) => sum + p.amount, 0);
   const cashIncome = cashFromSales + cashFromRepayments;
   const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
@@ -227,12 +287,10 @@ export async function getFinanceSummary() {
       deliveredQuantity: sale.deliveredQuantity,
       remainingQuantity: sale.remainingQuantity,
       pricePerUnit: sale.pricePerUnit,
-      paidAmount: sale.totalPrice,
+      paidAmount: sale.paidAmount,
       prepaymentRemainingAmount: sale.prepaymentRemainingAmount,
       createdAt: sale.createdAt,
     }));
-
-  const pendingGoods = activePrepayments;
 
   const prepaymentClients = clients.filter((c) => c.balance < 0);
 
@@ -254,7 +312,7 @@ export async function getFinanceSummary() {
       (sum, item) => sum + item.prepaymentRemainingAmount,
       0,
     ),
-    pendingGoods,
+    pendingGoods: activePrepayments,
   };
 }
 

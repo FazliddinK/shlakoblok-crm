@@ -72,7 +72,7 @@ export function formatSaleTelegramMessage(params: {
     `Количество: ${params.quantity} шт\n` +
     `Цена: ${params.pricePerUnit.toLocaleString("ru-RU")} сум\n` +
     `Сумма: ${params.totalPrice.toLocaleString("ru-RU")} сум\n` +
-    `Оплата: ${params.paymentLabel}\n\n` +
+    `${params.paymentLabel}\n\n` +
     `👤 ${params.operator.displayName}`
   );
 }

@@ -46,6 +46,7 @@ model Sale {
   quantity     Int
   pricePerUnit Float
   totalPrice   Float
+  paidAmount   Float         @default(0)
   paymentType  String        @default("paid")
   notes        String        @default("")
   userId       String
