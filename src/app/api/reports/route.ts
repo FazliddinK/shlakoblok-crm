@@ -18,6 +18,10 @@ function eachDateInclusive(from: string, to: string): string[] {
   return dates;
 }
 
+function dayKey(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
 export async function GET(request: NextRequest) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
@@ -29,33 +33,67 @@ export async function GET(request: NextRequest) {
   const { from, to, label } = resolveReportPeriod(period, fromParam, toParam);
   const dateFilter = buildDateFilter(from, to);
 
-  const [finance, sales, expenses] = await Promise.all([
+  const [finance, expenses, deliveries, legacySales] = await Promise.all([
     getFinanceSummary(),
-    prisma.sale.findMany({
-      where: dateFilter,
-      include: { client: true },
-      orderBy: { createdAt: "asc" },
-    }),
     prisma.expense.findMany({
       where: dateFilter,
       orderBy: { createdAt: "asc" },
     }),
+    prisma.goodsDelivery.findMany({
+      where: dateFilter,
+      include: { sale: { select: { pricePerUnit: true } } },
+      orderBy: { createdAt: "asc" },
+    }),
+    // Fallback for old paid/debt sales that never got GoodsDelivery rows
+    prisma.sale.findMany({
+      where: {
+        ...dateFilter,
+        paymentType: { in: ["paid", "debt"] },
+        goodsDeliveries: { none: {} },
+      },
+      select: {
+        quantity: true,
+        pricePerUnit: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "asc" },
+    }),
   ]);
 
-  const soldQuantity = sales.reduce((sum, sale) => sum + sale.quantity, 0);
-  const soldAmount = sales.reduce((sum, sale) => sum + sale.totalPrice, 0);
-  const avgPricePerUnit = soldQuantity > 0 ? soldAmount / soldQuantity : 0;
   const periodExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+
+  type Issuance = { date: Date; quantity: number; amount: number };
+  const issuances: Issuance[] = [];
+
+  for (const delivery of deliveries) {
+    issuances.push({
+      date: delivery.createdAt,
+      quantity: delivery.quantity,
+      amount: delivery.quantity * delivery.sale.pricePerUnit,
+    });
+  }
+
+  for (const sale of legacySales) {
+    issuances.push({
+      date: sale.createdAt,
+      quantity: sale.quantity,
+      amount: sale.quantity * sale.pricePerUnit,
+    });
+  }
+
+  const soldQuantity = issuances.reduce((sum, item) => sum + item.quantity, 0);
+  const soldAmount = issuances.reduce((sum, item) => sum + item.amount, 0);
+  const avgPricePerUnit = soldQuantity > 0 ? soldAmount / soldQuantity : 0;
 
   const byDay: Record<string, { amount: number; quantity: number; count: number }> = {};
   for (const date of eachDateInclusive(from, to)) {
     byDay[date] = { amount: 0, quantity: 0, count: 0 };
   }
-  for (const sale of sales) {
-    const key = sale.createdAt.toISOString().slice(0, 10);
+  for (const item of issuances) {
+    const key = dayKey(item.date);
     if (!byDay[key]) byDay[key] = { amount: 0, quantity: 0, count: 0 };
-    byDay[key].amount += sale.totalPrice;
-    byDay[key].quantity += sale.quantity;
+    byDay[key].amount += item.amount;
+    byDay[key].quantity += item.quantity;
     byDay[key].count += 1;
   }
 
@@ -72,7 +110,7 @@ export async function GET(request: NextRequest) {
     soldAmount,
     avgPricePerUnit,
     dailySales,
-    prepaymentsTotal: finance.prepaymentsTotal,
+    prepaymentsTotal: finance.activePrepaymentsTotal,
     debtTotal: finance.debtorsTotal,
     periodExpenses,
     cashBalance: finance.cashBalance,
