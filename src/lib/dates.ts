@@ -1,26 +1,55 @@
 import { SALES_PERIOD_LABELS } from "@/lib/constants";
 
+export const BUSINESS_TIME_ZONE = "Asia/Tashkent";
+const BUSINESS_UTC_OFFSET = "+05:00";
+
+function getBusinessDateParts(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: BUSINESS_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+
+  const values: Record<string, string> = {};
+  for (const part of parts) {
+    if (part.type !== "literal") values[part.type] = part.value;
+  }
+
+  return {
+    year: values.year,
+    month: values.month,
+    day: values.day,
+  };
+}
+
+function addCalendarDays(dateString: string, days: number): string {
+  const date = new Date(`${dateString}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return [
+    date.getUTCFullYear(),
+    String(date.getUTCMonth() + 1).padStart(2, "0"),
+    String(date.getUTCDate()).padStart(2, "0"),
+  ].join("-");
+}
+
 export function todayDateString(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return formatDateString(new Date());
 }
 
 export function formatDateString(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
+  const { year, month, day } = getBusinessDateParts(date);
   return `${year}-${month}-${day}`;
 }
 
 export function buildDateFilter(from?: string | null, to?: string | null) {
   if (!from && !to) return {};
+
   return {
     createdAt: {
-      ...(from ? { gte: new Date(from) } : {}),
-      ...(to ? { lte: new Date(`${to}T23:59:59.999`) } : {}),
+      ...(from ? { gte: new Date(`${from}T00:00:00.000${BUSINESS_UTC_OFFSET}`) } : {}),
+      ...(to ? { lte: new Date(`${to}T23:59:59.999${BUSINESS_UTC_OFFSET}`) } : {}),
     },
   };
 }
@@ -64,54 +93,62 @@ export function resolveReportPeriod(
   customTo?: string | null,
   labels: Record<string, string> = REPORT_PERIOD_LABELS,
 ) {
-  const now = new Date();
   const today = todayDateString();
+  const [year, month] = today.split("-").map(Number);
 
   switch (period) {
-    case "last7": {
-      const start = new Date(now);
-      start.setDate(start.getDate() - 6);
+    case "last7":
       return {
-        from: formatDateString(start),
+        from: addCalendarDays(today, -6),
         to: today,
         label: labels.last7 ?? "Последние 7 дней",
       };
-    }
+
     case "yesterday": {
-      const y = new Date(now);
-      y.setDate(y.getDate() - 1);
-      const date = formatDateString(y);
+      const date = addCalendarDays(today, -1);
       return { from: date, to: date, label: labels.yesterday };
     }
+
     case "week": {
-      const start = new Date(now);
-      const day = start.getDay();
-      const diff = day === 0 ? 6 : day - 1;
-      start.setDate(start.getDate() - diff);
+      const weekday = new Date(`${today}T00:00:00.000Z`).getUTCDay();
+      const daysSinceMonday = weekday === 0 ? 6 : weekday - 1;
       return {
-        from: formatDateString(start),
+        from: addCalendarDays(today, -daysSinceMonday),
         to: today,
         label: labels.week,
       };
     }
+
     case "last_month": {
-      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const end = new Date(now.getFullYear(), now.getMonth(), 0);
+      const currentMonthStart = new Date(Date.UTC(year, month - 1, 1));
+      const previousMonthEnd = new Date(currentMonthStart);
+      previousMonthEnd.setUTCDate(0);
+      const previousMonthStart = new Date(
+        Date.UTC(previousMonthEnd.getUTCFullYear(), previousMonthEnd.getUTCMonth(), 1),
+      );
+
+      const asDateString = (date: Date) =>
+        [
+          date.getUTCFullYear(),
+          String(date.getUTCMonth() + 1).padStart(2, "0"),
+          String(date.getUTCDate()).padStart(2, "0"),
+        ].join("-");
+
       return {
-        from: formatDateString(start),
-        to: formatDateString(end),
+        from: asDateString(previousMonthStart),
+        to: asDateString(previousMonthEnd),
         label: labels.last_month,
       };
     }
-    case "month": {
-      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    case "month":
       return {
-        from: formatDateString(start),
+        from: `${today.slice(0, 7)}-01`,
         to: today,
         label: labels.month,
       };
-    }
-    case "custom": {
+
+    case "custom":
       return {
         from: customFrom ?? today,
         to: customTo ?? today,
@@ -122,7 +159,7 @@ export function resolveReportPeriod(
               : `${customFrom} — ${customTo}`
             : labels.custom,
       };
-    }
+
     case "today":
     default:
       return { from: today, to: today, label: labels.today };
