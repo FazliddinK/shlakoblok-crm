@@ -1,7 +1,8 @@
 import ExcelJS from "exceljs";
 import { prisma } from "@/lib/db";
 import { PAYMENT_TYPE_LABELS } from "@/lib/constants";
-import { buildDateFilter } from "@/lib/dates";
+import { BUSINESS_TIME_ZONE, buildDateFilter } from "@/lib/dates";
+import { DEFAULT_LOCALE, Locale, localeToIntl, translate } from "@/lib/i18n";
 
 function styleHeader(row: ExcelJS.Row) {
   row.font = { bold: true };
@@ -24,7 +25,14 @@ function autoWidth(sheet: ExcelJS.Worksheet) {
   });
 }
 
-export async function buildExportWorkbook(from?: string, to?: string) {
+export async function buildExportWorkbook(from?: string, to?: string, locale: Locale = DEFAULT_LOCALE) {
+  const t = (source: string) => translate(locale, source);
+  const intlLocale = localeToIntl(locale);
+  const formatWhen = (value: Date | string) => new Intl.DateTimeFormat(intlLocale, {
+    timeZone: BUSINESS_TIME_ZONE,
+    dateStyle: "short",
+    timeStyle: "medium",
+  }).format(new Date(value));
   const dateFilter = buildDateFilter(from, to);
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'ООО "Qurilish resurslari"';
@@ -35,12 +43,12 @@ export async function buildExportWorkbook(from?: string, to?: string) {
       ? from === to
         ? from
         : `${from} — ${to}`
-      : "Весь период";
+      : t("Весь период");
 
-  const summary = workbook.addWorksheet("Сводка");
-  summary.addRow(["SHLAKOBLOK CRM — экспорт данных"]);
-  summary.addRow(["Период", periodLabel]);
-  summary.addRow(["Дата экспорта", new Date().toLocaleString("ru-RU")]);
+  const summary = workbook.addWorksheet(t("Сводка"));
+  summary.addRow([t("SHLAKOBLOK CRM — экспорт данных")]);
+  summary.addRow([t("Период"), periodLabel]);
+  summary.addRow([t("Дата экспорта"), formatWhen(new Date())]);
   summary.addRow([]);
 
   const settings = await prisma.appSettings.findUnique({ where: { id: "default" } });
@@ -75,59 +83,59 @@ export async function buildExportWorkbook(from?: string, to?: string) {
   const expenseTotal = expenses.reduce((s, x) => s + x.amount, 0);
   const repaymentTotal = debtPayments.reduce((s, x) => s + x.amount, 0);
 
-  summary.addRow(["Показатель", "Значение"]);
+  summary.addRow([t("Показатель"), t("Значение")]);
   styleHeader(summary.getRow(5));
-  summary.addRow(["Начальный остаток кассы", settings?.openingBalance ?? 0]);
-  summary.addRow(["Продаж (шт)", sales.length]);
-  summary.addRow(["Выручка по продажам", salesRevenue]);
-  summary.addRow(["Погашения долга", repaymentTotal]);
-  summary.addRow(["Расходов (шт)", expenses.length]);
-  summary.addRow(["Сумма расходов", expenseTotal]);
-  summary.addRow(["Клиентов", clients.length]);
-  summary.addRow(["Пользователей", users.length]);
+  summary.addRow([t("Начальный остаток кассы"), settings?.openingBalance ?? 0]);
+  summary.addRow([t("Продаж (шт)"), sales.length]);
+  summary.addRow([t("Выручка по продажам"), salesRevenue]);
+  summary.addRow([t("Погашения долга"), repaymentTotal]);
+  summary.addRow([t("Расходов (шт)"), expenses.length]);
+  summary.addRow([t("Сумма расходов"), expenseTotal]);
+  summary.addRow([t("Клиентов"), clients.length]);
+  summary.addRow([t("Пользователей"), users.length]);
   autoWidth(summary);
 
-  const salesSheet = workbook.addWorksheet("Продажи");
+  const salesSheet = workbook.addWorksheet(t("Продажи"));
   salesSheet.addRow([
-    "Дата",
-    "Марка",
-    "Гос. номер",
-    "Кол-во",
-    "Цена/шт",
-    "Итого",
-    "Тип оплаты",
-    "Примечание",
-    "Оператор",
+    t("Дата"),
+    t("Марка"),
+    t("Гос. номер"),
+    t("Кол-во"),
+    t("Цена/шт"),
+    t("Итого"),
+    t("Тип оплаты"),
+    t("Примечание"),
+    t("Оператор"),
   ]);
   styleHeader(salesSheet.getRow(1));
   for (const sale of sales) {
     salesSheet.addRow([
-      new Date(sale.createdAt).toLocaleString("ru-RU"),
+      formatWhen(sale.createdAt),
       sale.client.carBrand,
       sale.client.licensePlate,
       sale.quantity,
       sale.pricePerUnit,
       sale.totalPrice,
-      PAYMENT_TYPE_LABELS[sale.paymentType] ?? sale.paymentType,
+      t(PAYMENT_TYPE_LABELS[sale.paymentType] ?? sale.paymentType),
       sale.notes,
       sale.user.displayName,
     ]);
   }
   autoWidth(salesSheet);
 
-  const expensesSheet = workbook.addWorksheet("Расходы");
+  const expensesSheet = workbook.addWorksheet(t("Расходы"));
   expensesSheet.addRow([
-    "Дата",
-    "Категория",
-    "Контрагент",
-    "Сумма",
-    "Примечание",
-    "Оператор",
+    t("Дата"),
+    t("Категория"),
+    t("Контрагент"),
+    t("Сумма"),
+    t("Примечание"),
+    t("Оператор"),
   ]);
   styleHeader(expensesSheet.getRow(1));
   for (const expense of expenses) {
     expensesSheet.addRow([
-      new Date(expense.createdAt).toLocaleString("ru-RU"),
+      formatWhen(expense.createdAt),
       expense.category.name,
       expense.counterparty.name,
       expense.amount,
@@ -137,14 +145,14 @@ export async function buildExportWorkbook(from?: string, to?: string) {
   }
   autoWidth(expensesSheet);
 
-  const clientsSheet = workbook.addWorksheet("Клиенты");
+  const clientsSheet = workbook.addWorksheet(t("Клиенты"));
   clientsSheet.addRow([
-    "Марка",
-    "Гос. номер",
-    "Телефон",
-    "Баланс",
-    "Примечание",
-    "Дата регистрации",
+    t("Марка"),
+    t("Гос. номер"),
+    t("Телефон"),
+    t("Баланс"),
+    t("Примечание"),
+    t("Дата регистрации"),
   ]);
   styleHeader(clientsSheet.getRow(1));
   for (const client of clients) {
@@ -154,24 +162,24 @@ export async function buildExportWorkbook(from?: string, to?: string) {
       client.phone,
       client.balance,
       client.notes,
-      new Date(client.createdAt).toLocaleString("ru-RU"),
+      formatWhen(client.createdAt),
     ]);
   }
   autoWidth(clientsSheet);
 
-  const repaySheet = workbook.addWorksheet("Погашения долга");
+  const repaySheet = workbook.addWorksheet(t("Погашения долга"));
   repaySheet.addRow([
-    "Дата",
-    "Гос. номер",
-    "Марка",
-    "Сумма",
-    "Примечание",
-    "Оператор",
+    t("Дата"),
+    t("Гос. номер"),
+    t("Марка"),
+    t("Сумма"),
+    t("Примечание"),
+    t("Оператор"),
   ]);
   styleHeader(repaySheet.getRow(1));
   for (const payment of debtPayments) {
     repaySheet.addRow([
-      new Date(payment.createdAt).toLocaleString("ru-RU"),
+      formatWhen(payment.createdAt),
       payment.sale.client.licensePlate,
       payment.sale.client.carBrand,
       payment.amount,
@@ -190,20 +198,20 @@ export async function buildExportWorkbook(from?: string, to?: string) {
     orderBy: { createdAt: "desc" },
   });
 
-  const deliveriesSheet = workbook.addWorksheet("Выдачи товара");
+  const deliveriesSheet = workbook.addWorksheet(t("Выдачи товара"));
   deliveriesSheet.addRow([
-    "Дата",
-    "Марка",
-    "Гос. номер клиента",
-    "Гос. номер выдачи",
-    "Кол-во",
-    "Примечание",
-    "Оператор",
+    t("Дата"),
+    t("Марка"),
+    t("Гос. номер клиента"),
+    t("Гос. номер выдачи"),
+    t("Кол-во"),
+    t("Примечание"),
+    t("Оператор"),
   ]);
   styleHeader(deliveriesSheet.getRow(1));
   for (const delivery of deliveries) {
     deliveriesSheet.addRow([
-      new Date(delivery.createdAt).toLocaleString("ru-RU"),
+      formatWhen(delivery.createdAt),
       delivery.sale.client.carBrand,
       delivery.sale.client.licensePlate,
       delivery.licensePlate,
@@ -214,15 +222,15 @@ export async function buildExportWorkbook(from?: string, to?: string) {
   }
   autoWidth(deliveriesSheet);
 
-  const usersSheet = workbook.addWorksheet("Пользователи");
-  usersSheet.addRow(["Логин", "Имя", "Роль", "Создан"]);
+  const usersSheet = workbook.addWorksheet(t("Пользователи"));
+  usersSheet.addRow([t("Логин"), t("Имя"), t("Роль"), t("Создан")]);
   styleHeader(usersSheet.getRow(1));
   for (const user of users) {
     usersSheet.addRow([
       user.username,
       user.displayName,
-      user.role === "admin" ? "Админ" : "Оператор",
-      new Date(user.createdAt).toLocaleString("ru-RU"),
+      t(user.role === "admin" ? "Админ" : "Оператор"),
+      formatWhen(user.createdAt),
     ]);
   }
   autoWidth(usersSheet);

@@ -29,7 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatCurrency } from "@/lib/labels";
+import { useI18n } from "@/components/i18n-provider";
 import { todayDateString } from "@/lib/dates";
 
 interface ClientRow {
@@ -43,6 +43,7 @@ interface ClientRow {
 }
 
 export default function ClientsPage() {
+  const { t, formatCurrency } = useI18n();
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [userName, setUserName] = useState("");
   const [search, setSearch] = useState("");
@@ -117,7 +118,7 @@ export default function ClientsPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Удалить клиента и все его продажи?")) return;
+    if (!confirm(t("Удалить клиента и все его продажи?"))) return;
     await fetch(`/api/clients/${id}`, { method: "DELETE" });
     load();
   }
@@ -146,7 +147,7 @@ export default function ClientsPage() {
       setRepayOpen(false);
       load();
     } else {
-      setRepayError(data.error || "Ошибка погашения");
+      setRepayError(t(data.error || "Ошибка погашения"));
     }
   }
 
@@ -172,7 +173,7 @@ export default function ClientsPage() {
       );
       if (!res.ok) {
         const err = await res.json().catch(() => null);
-        alert(err?.error || "Не удалось сформировать акт сверки");
+        alert(t(err?.error || "Не удалось сформировать акт сверки"));
         return;
       }
       const blob = await res.blob();
@@ -188,7 +189,7 @@ export default function ClientsPage() {
       URL.revokeObjectURL(url);
       setActOpen(false);
     } catch {
-      alert("Не удалось сформировать акт сверки");
+      alert(t("Не удалось сформировать акт сверки"));
     } finally {
       setActLoading(false);
     }
@@ -197,7 +198,7 @@ export default function ClientsPage() {
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center text-zinc-500">
-        Загрузка...
+        {t("Загрузка...")}
       </div>
     );
   }
@@ -205,13 +206,13 @@ export default function ClientsPage() {
   return (
     <div>
       <PageHeader
-        title="Клиенты"
-        description="Баланс, погашение долга и акт сверки"
+        title={t("Клиенты")}
+        description={t("Баланс, погашение долга и акт сверки")}
         userName={userName}
         action={
           <Button onClick={openCreate} className="bg-orange-500 hover:bg-orange-600">
             <Plus className="mr-2 h-4 w-4" />
-            Добавить клиента
+            {t("Добавить клиента")}
           </Button>
         }
       />
@@ -219,7 +220,7 @@ export default function ClientsPage() {
       <div className="relative mb-4 max-w-sm">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
         <Input
-          placeholder="Поиск по марке, номеру, телефону..."
+          placeholder={t("Поиск по марке, номеру, телефону...")}
           className="pl-9"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -228,19 +229,19 @@ export default function ClientsPage() {
 
       {clients.length === 0 ? (
         <div className="rounded-lg border border-dashed p-12 text-center text-zinc-500">
-          Клиентов пока нет
+          {t("Клиентов пока нет")}
         </div>
       ) : (
         <div className="rounded-lg border bg-white overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Марка авто</TableHead>
-                <TableHead>Гос. номер</TableHead>
-                <TableHead className="hidden sm:table-cell">Телефон</TableHead>
-                <TableHead>Баланс</TableHead>
-                <TableHead>Продаж</TableHead>
-                <TableHead className="w-40">Действия</TableHead>
+                <TableHead>{t("Марка авто")}</TableHead>
+                <TableHead>{t("Гос. номер")}</TableHead>
+                <TableHead className="hidden sm:table-cell">{t("Телефон")}</TableHead>
+                <TableHead>{t("Баланс")}</TableHead>
+                <TableHead>{t("Продаж")}</TableHead>
+                <TableHead className="w-40">{t("Действия")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -254,11 +255,11 @@ export default function ClientsPage() {
                   <TableCell>
                     {client.balance > 0 ? (
                       <span className="font-medium text-red-600">
-                        Долг {formatCurrency(client.balance)}
+                        {t("Долг")} {formatCurrency(client.balance)}
                       </span>
                     ) : client.balance < 0 ? (
                       <span className="font-medium text-blue-600">
-                        Предоплата {formatCurrency(Math.abs(client.balance))}
+                        {t("Предоплата")} {formatCurrency(Math.abs(client.balance))}
                       </span>
                     ) : (
                       <span className="text-zinc-400">—</span>
@@ -271,7 +272,7 @@ export default function ClientsPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          title="Погасить долг"
+                          title={t("Погасить долг")}
                           onClick={() => openRepay(client)}
                         >
                           <Banknote className="h-4 w-4 text-green-600" />
@@ -280,7 +281,7 @@ export default function ClientsPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        title="Акт сверки"
+                        title={t("Акт сверки")}
                         onClick={() => openAct(client)}
                       >
                         <FileSpreadsheet className="h-4 w-4 text-orange-600" />
@@ -312,12 +313,12 @@ export default function ClientsPage() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>
-              {editing ? "Редактировать клиента" : "Новый клиент"}
+              {editing ? t("Редактировать клиента") : t("Новый клиент")}
             </DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-2">
             <div className="grid gap-2">
-              <Label>Марка авто *</Label>
+              <Label>{t("Марка авто *")}</Label>
               <Input
                 value={form.carBrand}
                 onChange={(e) => setForm({ ...form, carBrand: e.target.value })}
@@ -325,7 +326,7 @@ export default function ClientsPage() {
               />
             </div>
             <div className="grid gap-2">
-              <Label>Гос. номер *</Label>
+              <Label>{t("Гос. номер *")}</Label>
               <Input
                 value={form.licensePlate}
                 onChange={(e) =>
@@ -336,14 +337,14 @@ export default function ClientsPage() {
               />
             </div>
             <div className="grid gap-2">
-              <Label>Телефон</Label>
+              <Label>{t("Телефон")}</Label>
               <Input
                 value={form.phone}
                 onChange={(e) => setForm({ ...form, phone: e.target.value })}
               />
             </div>
             <div className="grid gap-2">
-              <Label>Заметки</Label>
+              <Label>{t("Заметки")}</Label>
               <Textarea
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
@@ -352,13 +353,13 @@ export default function ClientsPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>
-              Отмена
+              {t("Отмена")}
             </Button>
             <Button
               onClick={handleSave}
               className="bg-orange-500 hover:bg-orange-600"
             >
-              {editing ? "Сохранить" : "Добавить"}
+              {editing ? t("Сохранить") : t("Добавить")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -367,7 +368,7 @@ export default function ClientsPage() {
       <Dialog open={repayOpen} onOpenChange={setRepayOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Погашение долга клиента</DialogTitle>
+            <DialogTitle>{t("Погашение долга клиента")}</DialogTitle>
           </DialogHeader>
           {repayClient && (
             <div className="space-y-4 py-2">
@@ -375,13 +376,13 @@ export default function ClientsPage() {
                 {repayClient.carBrand} · {repayClient.licensePlate}
               </p>
               <p className="text-sm">
-                Текущий долг:{" "}
+                {t("Текущий долг")}:{" "}
                 <span className="font-semibold text-red-600">
                   {formatCurrency(Math.max(0, repayClient.balance))}
                 </span>
               </p>
               <div className="grid gap-2">
-                <Label>Сумма погашения, сум</Label>
+                <Label>{t("Сумма погашения, сум")}</Label>
                 <Input
                   type="number"
                   min={1}
@@ -391,7 +392,7 @@ export default function ClientsPage() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label>Примечание</Label>
+                <Label>{t("Примечание")}</Label>
                 <Textarea
                   value={repayNote}
                   onChange={(e) => setRepayNote(e.target.value)}
@@ -404,21 +405,21 @@ export default function ClientsPage() {
           )}
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setRepayOpen(false)}>
-              Отмена
+              {t("Отмена")}
             </Button>
             <Button
               variant="outline"
               disabled={repayLoading}
               onClick={() => handleRepay(false)}
             >
-              Частично
+              {t("Частично")}
             </Button>
             <Button
               className="bg-green-600 hover:bg-green-700"
               disabled={repayLoading}
               onClick={() => handleRepay(true)}
             >
-              Погасить полностью
+              {t("Погасить полностью")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -427,7 +428,7 @@ export default function ClientsPage() {
       <Dialog open={actOpen} onOpenChange={setActOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Акт сверки</DialogTitle>
+            <DialogTitle>{t("Акт сверки")}</DialogTitle>
           </DialogHeader>
           {actClient && (
             <div className="space-y-4 py-2">
@@ -436,7 +437,7 @@ export default function ClientsPage() {
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <div className="grid gap-2">
-                  <Label>С</Label>
+                  <Label>{t("С")}</Label>
                   <Input
                     type="date"
                     value={actFrom}
@@ -444,7 +445,7 @@ export default function ClientsPage() {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label>По</Label>
+                  <Label>{t("По")}</Label>
                   <Input
                     type="date"
                     value={actTo}
@@ -453,21 +454,20 @@ export default function ClientsPage() {
                 </div>
               </div>
               <p className="text-xs text-zinc-500">
-                Excel-файл с начислениями, оплатами и сальдо как в бухгалтерском
-                акте сверки.
+                {t("Excel-файл с начислениями, оплатами и сальдо как в бухгалтерском акте сверки.")}
               </p>
             </div>
           )}
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setActOpen(false)}>
-              Отмена
+              {t("Отмена")}
             </Button>
             <Button
               variant="outline"
               disabled={actLoading}
               onClick={() => downloadAct(true)}
             >
-              Весь период
+              {t("Весь период")}
             </Button>
             <Button
               className="bg-orange-500 hover:bg-orange-600"
@@ -475,7 +475,7 @@ export default function ClientsPage() {
               onClick={() => downloadAct(false)}
             >
               <FileSpreadsheet className="mr-2 h-4 w-4" />
-              Скачать Excel
+              {t("Скачать Excel")}
             </Button>
           </DialogFooter>
         </DialogContent>

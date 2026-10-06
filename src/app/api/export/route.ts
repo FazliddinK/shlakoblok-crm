@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { buildExportWorkbook } from "@/lib/export";
+import { requestLocale } from "@/lib/i18n-server";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
 
+  const locale = requestLocale(request);
   const from = request.nextUrl.searchParams.get("from") ?? undefined;
   const to = request.nextUrl.searchParams.get("to") ?? undefined;
 
-  const workbook = await buildExportWorkbook(from, to);
+  const workbook = await buildExportWorkbook(from, to, locale);
   const buffer = await workbook.xlsx.writeBuffer();
 
   const filename =

@@ -15,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatDateTime } from "@/lib/labels";
+import { useI18n } from "@/components/i18n-provider";
 import { ENTITY_LABELS, type EntityType } from "@/lib/constants";
 
 interface DeletedRecord {
@@ -35,6 +35,7 @@ interface ChangeRecord {
 }
 
 export default function DeletedPage() {
+  const { t, formatDateTime } = useI18n();
   const [userName, setUserName] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [deleted, setDeleted] = useState<DeletedRecord[]>([]);
@@ -71,11 +72,11 @@ export default function DeletedPage() {
       body: JSON.stringify({ id, action: "restore", type: "deleted" }),
     });
     if (res.ok) {
-      setMsg("Удалённая запись восстановлена");
+      setMsg(t("Удалённая запись восстановлена"));
       load();
     } else {
       const data = await res.json();
-      setError(data.error || "Ошибка восстановления");
+      setError(t(data.error || "Ошибка восстановления"));
     }
   }
 
@@ -89,53 +90,53 @@ export default function DeletedPage() {
       body: JSON.stringify({ id, action: "restore", type: "change" }),
     });
     if (res.ok) {
-      setMsg("Изменение отменено, данные восстановлены");
+      setMsg(t("Изменение отменено, данные восстановлены"));
       load();
     } else {
       const data = await res.json();
-      setError(data.error || "Ошибка отката");
+      setError(t(data.error || "Ошибка отката"));
     }
   }
 
   async function handlePurge(id: string) {
     if (!isAdmin) return;
-    if (!confirm("Удалить без возможности восстановления?")) return;
+    if (!confirm(t("Удалить без возможности восстановления?"))) return;
     const res = await fetch(`/api/deleted?id=${id}`, { method: "DELETE" });
     if (res.ok) {
-      setMsg("Запись окончательно удалена");
+      setMsg(t("Запись окончательно удалена"));
       load();
     }
   }
 
   async function handlePurgeAll() {
     if (!isAdmin) return;
-    if (!confirm("Очистить все удалённые данные без восстановления?")) return;
+    if (!confirm(t("Очистить все удалённые данные без восстановления?"))) return;
     const res = await fetch("/api/deleted", { method: "DELETE" });
     if (res.ok) {
-      setMsg("Корзина очищена");
+      setMsg(t("Корзина очищена"));
       load();
     }
   }
 
   if (loading) {
-    return <div className="flex h-64 items-center justify-center text-zinc-500">Загрузка...</div>;
+    return <div className="flex h-64 items-center justify-center text-zinc-500">{t("Загрузка...")}</div>;
   }
 
   return (
     <div>
       <PageHeader
-        title="Изменения и удалённые"
+        title={t("Изменения и удалённые")}
         description={
           isAdmin
-            ? "История изменений и удалённых записей. Восстановление — только для администратора."
-            : "История изменений и удалённых записей. Восстановление доступно администратору."
+            ? t("История изменений и удалённых записей. Восстановление — только для администратора.")
+            : t("История изменений и удалённых записей. Восстановление доступно администратору.")
         }
         userName={userName}
         action={
           isAdmin && deleted.length > 0 ? (
             <Button variant="destructive" size="sm" onClick={handlePurgeAll}>
               <Trash2 className="mr-2 h-4 w-4" />
-              Очистить удалённые
+              {t("Очистить удалённые")}
             </Button>
           ) : undefined
         }
@@ -151,10 +152,10 @@ export default function DeletedPage() {
       <Tabs defaultValue="changes">
         <TabsList className="mb-4">
           <TabsTrigger value="changes">
-            Изменения ({changes.length})
+            {t("Изменения")} ({changes.length})
           </TabsTrigger>
           <TabsTrigger value="deleted">
-            Удалённые ({deleted.length})
+            {t("Удалённые")} ({deleted.length})
           </TabsTrigger>
         </TabsList>
 
@@ -163,21 +164,21 @@ export default function DeletedPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <History className="h-4 w-4 text-orange-500" />
-                Журнал изменений
+                {t("Журнал изменений")}
               </CardTitle>
             </CardHeader>
             <CardContent>
               {changes.length === 0 ? (
-                <p className="text-sm text-zinc-500">Изменений пока нет</p>
+                <p className="text-sm text-zinc-500">{t("Изменений пока нет")}</p>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Тип</TableHead>
-                      <TableHead>Что изменено</TableHead>
-                      <TableHead>Когда</TableHead>
-                      <TableHead>Оператор</TableHead>
-                      {isAdmin && <TableHead className="w-20">Действие</TableHead>}
+                      <TableHead>{t("Тип")}</TableHead>
+                      <TableHead>{t("Что изменено")}</TableHead>
+                      <TableHead>{t("Когда")}</TableHead>
+                      <TableHead>{t("Оператор")}</TableHead>
+                      {isAdmin && <TableHead className="w-20">{t("Действие")}</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -185,10 +186,10 @@ export default function DeletedPage() {
                       <TableRow key={r.id}>
                         <TableCell>
                           <Badge variant="outline">
-                            {ENTITY_LABELS[r.entityType] ?? r.entityType}
+                            {t(ENTITY_LABELS[r.entityType] ?? r.entityType)}
                           </Badge>
                         </TableCell>
-                        <TableCell className="max-w-md text-sm">{r.label}</TableCell>
+                        <TableCell className="max-w-md text-sm">{t(r.label)}</TableCell>
                         <TableCell className="text-xs whitespace-nowrap">
                           {formatDateTime(r.changedAt)}
                         </TableCell>
@@ -203,7 +204,7 @@ export default function DeletedPage() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              title="Отменить изменение"
+                              title={t("Отменить изменение")}
                               onClick={() => handleRestoreChange(r.id)}
                             >
                               <RotateCcw className="h-4 w-4 text-green-600" />
@@ -224,21 +225,21 @@ export default function DeletedPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <ShieldAlert className="h-4 w-4 text-orange-500" />
-                Удалённые записи
+                {t("Удалённые записи")}
               </CardTitle>
             </CardHeader>
             <CardContent>
               {deleted.length === 0 ? (
-                <p className="text-sm text-zinc-500">Удалённых записей нет</p>
+                <p className="text-sm text-zinc-500">{t("Удалённых записей нет")}</p>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Тип</TableHead>
-                      <TableHead>Описание</TableHead>
-                      <TableHead>Удалено</TableHead>
-                      <TableHead>Кто удалил</TableHead>
-                      {isAdmin && <TableHead className="w-28">Действия</TableHead>}
+                      <TableHead>{t("Тип")}</TableHead>
+                      <TableHead>{t("Описание")}</TableHead>
+                      <TableHead>{t("Удалено")}</TableHead>
+                      <TableHead>{t("Кто удалил")}</TableHead>
+                      {isAdmin && <TableHead className="w-28">{t("Действия")}</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -246,10 +247,10 @@ export default function DeletedPage() {
                       <TableRow key={r.id}>
                         <TableCell>
                           <Badge variant="outline">
-                            {ENTITY_LABELS[r.entityType] ?? r.entityType}
+                            {t(ENTITY_LABELS[r.entityType] ?? r.entityType)}
                           </Badge>
                         </TableCell>
-                        <TableCell className="font-medium">{r.label}</TableCell>
+                        <TableCell className="font-medium">{t(r.label)}</TableCell>
                         <TableCell className="text-xs whitespace-nowrap">
                           {formatDateTime(r.deletedAt)}
                         </TableCell>
@@ -265,7 +266,7 @@ export default function DeletedPage() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                title="Восстановить"
+                                title={t("Восстановить")}
                                 onClick={() => handleRestoreDeleted(r.id)}
                               >
                                 <RotateCcw className="h-4 w-4 text-green-600" />
@@ -273,7 +274,7 @@ export default function DeletedPage() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                title="Удалить навсегда"
+                                title={t("Удалить навсегда")}
                                 onClick={() => handlePurge(r.id)}
                               >
                                 <Trash2 className="h-4 w-4 text-red-500" />

@@ -26,7 +26,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatCurrency, formatDateTime } from "@/lib/labels";
+import { useI18n } from "@/components/i18n-provider";
 
 interface Expense {
   id: string;
@@ -39,6 +39,7 @@ interface Expense {
 }
 
 export default function ExpensesPage() {
+  const { t, formatCurrency, formatDateTime } = useI18n();
   const [userName, setUserName] = useState("");
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
@@ -98,13 +99,13 @@ export default function ExpensesPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Удалить расход?")) return;
+    if (!confirm(t("Удалить расход?"))) return;
     await fetch(`/api/expenses/${id}`, { method: "DELETE" });
     load();
   }
 
   if (loading) {
-    return <div className="flex h-64 items-center justify-center text-zinc-500">Загрузка...</div>;
+    return <div className="flex h-64 items-center justify-center text-zinc-500">{t("Загрузка...")}</div>;
   }
 
   const isToday = from === to && from === todayDateString();
@@ -113,13 +114,13 @@ export default function ExpensesPage() {
   return (
     <div>
       <PageHeader
-        title="Расходы"
-        description="Журнал расходных операций"
+        title={t("Расходы")}
+        description={t("Журнал расходных операций")}
         userName={userName}
         action={
           <Button onClick={() => setOpen(true)} className="bg-orange-500 hover:bg-orange-600">
             <Plus className="mr-2 h-4 w-4" />
-            Новый расход
+            {t("Новый расход")}
           </Button>
         }
       />
@@ -128,13 +129,13 @@ export default function ExpensesPage() {
         <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <CardTitle className="text-base">
-              Журнал расходов
+              {t("Журнал расходов")}
               {isToday && (
-                <span className="ml-2 text-sm font-normal text-zinc-500">(сегодня)</span>
+                <span className="ml-2 text-sm font-normal text-zinc-500">({t("Сегодня").toLowerCase()})</span>
               )}
             </CardTitle>
             <p className="mt-1 text-sm text-zinc-500">
-              Итого за период: <span className="font-semibold text-red-600">{formatCurrency(periodTotal)}</span>
+              {t("Итого за период")}: <span className="font-semibold text-red-600">{formatCurrency(periodTotal)}</span>
             </p>
           </div>
           <DateRangeFilter
@@ -148,16 +149,16 @@ export default function ExpensesPage() {
         </CardHeader>
         <CardContent>
           {expenses.length === 0 ? (
-            <p className="text-sm text-zinc-500">Расходов за выбранный период нет</p>
+            <p className="text-sm text-zinc-500">{t("Расходов за выбранный период нет")}</p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Дата</TableHead>
-                  <TableHead>Категория</TableHead>
-                  <TableHead>Контрагент</TableHead>
-                  <TableHead>Примечание</TableHead>
-                  <TableHead>Сумма</TableHead>
+                  <TableHead>{t("Дата")}</TableHead>
+                  <TableHead>{t("Категория")}</TableHead>
+                  <TableHead>{t("Контрагент")}</TableHead>
+                  <TableHead>{t("Примечание")}</TableHead>
+                  <TableHead>{t("Сумма")}</TableHead>
                   <TableHead className="w-12" />
                 </TableRow>
               </TableHeader>
@@ -191,16 +192,16 @@ export default function ExpensesPage() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Новый расход</DialogTitle>
+            <DialogTitle>{t("Новый расход")}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-2">
             <div className="grid gap-2">
-              <Label>Категория расходов *</Label>
+              <Label>{t("Категория расходов *")}</Label>
               <Input
                 list="categories-list"
                 value={form.categoryName}
                 onChange={(e) => setForm({ ...form, categoryName: e.target.value })}
-                placeholder="Выберите или введите новую"
+                placeholder={t("Выберите или введите новую")}
               />
               <datalist id="categories-list">
                 {categories.map((c) => (
@@ -209,12 +210,12 @@ export default function ExpensesPage() {
               </datalist>
             </div>
             <div className="grid gap-2">
-              <Label>Контрагент *</Label>
+              <Label>{t("Контрагент *")}</Label>
               <Input
                 list="counterparties-list"
                 value={form.counterpartyName}
                 onChange={(e) => setForm({ ...form, counterpartyName: e.target.value })}
-                placeholder="Выберите или введите нового"
+                placeholder={t("Выберите или введите нового")}
               />
               <datalist id="counterparties-list">
                 {counterparties.map((c) => (
@@ -223,7 +224,7 @@ export default function ExpensesPage() {
               </datalist>
             </div>
             <div className="grid gap-2">
-              <Label>Сумма, сум *</Label>
+              <Label>{t("Сумма, сум *")}</Label>
               <Input
                 type="number"
                 min={1}
@@ -232,7 +233,7 @@ export default function ExpensesPage() {
               />
             </div>
             <div className="grid gap-2">
-              <Label>Примечание</Label>
+              <Label>{t("Примечание")}</Label>
               <Textarea
                 value={form.note}
                 onChange={(e) => setForm({ ...form, note: e.target.value })}
@@ -240,9 +241,9 @@ export default function ExpensesPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>Отмена</Button>
+            <Button variant="outline" onClick={() => setOpen(false)}>{t("Отмена")}</Button>
             <Button onClick={handleSave} className="bg-orange-500 hover:bg-orange-600">
-              Сохранить
+              {t("Сохранить")}
             </Button>
           </DialogFooter>
         </DialogContent>

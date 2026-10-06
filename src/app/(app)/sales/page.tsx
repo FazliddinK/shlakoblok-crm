@@ -35,7 +35,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatCurrency, formatDateTime } from "@/lib/labels";
+import { useI18n } from "@/components/i18n-provider";
 import { SALES_PERIOD_LABELS } from "@/lib/constants";
 import { todayDateString } from "@/lib/dates";
 import { printReceipt, type SaleWithRelations } from "@/components/sales/receipt";
@@ -65,12 +65,11 @@ interface SaleRow extends SaleWithRelations {
   goodsDeliveries?: GoodsDeliveryRow[];
 }
 
-const PERIOD_OPTIONS = Object.entries(SALES_PERIOD_LABELS).map(([value, label]) => ({
-  value,
-  label,
-}));
-
 export default function SalesPage() {
+  const { t, locale, formatCurrency, formatDateTime } = useI18n();
+  const unit = locale === "ru" ? "шт" : "dona";
+  const currencyName = locale === "ru" ? "сум" : "so‘m";
+  const periodOptions = Object.entries(SALES_PERIOD_LABELS).map(([value, label]) => ({ value, label: t(label) }));
   const [tab, setTab] = useState<"sales" | "pending">("sales");
   const [sales, setSales] = useState<SaleRow[]>([]);
   const [pendingSales, setPendingSales] = useState<SaleRow[]>([]);
@@ -251,12 +250,12 @@ export default function SalesPage() {
       const sale = await res.json();
       setOpen(false);
       load();
-      if (andPrint) printReceipt(sale);
+      if (andPrint) printReceipt(sale, locale);
     }
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Удалить продажу?")) return;
+    if (!confirm(t("Удалить продажу?"))) return;
     await fetch(`/api/sales/${id}`, { method: "DELETE" });
     load();
   }
@@ -278,12 +277,12 @@ export default function SalesPage() {
       setDeliverOpen(false);
       load();
     } else {
-      setActionError(data.error || "Ошибка выдачи");
+      setActionError(t(data.error || "Ошибка выдачи"));
     }
   }
 
   async function handleDeleteDelivery(saleId: string, deliveryId: string) {
-    if (!confirm("Удалить запись выдачи?")) return;
+    if (!confirm(t("Удалить запись выдачи?"))) return;
     await fetch(`/api/sales/${saleId}/deliver/${deliveryId}`, { method: "DELETE" });
     load();
     if (detailSale?.id === saleId) {
@@ -296,7 +295,7 @@ export default function SalesPage() {
     if (items.length === 0) {
       return (
         <div className="rounded-lg border border-dashed p-12 text-center text-zinc-500">
-          Нет продаж с не выданным товаром.
+          {t("Нет продаж с не выданным товаром.")}
         </div>
       );
     }
@@ -306,15 +305,15 @@ export default function SalesPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Клиент</TableHead>
-              <TableHead>Гос. номер</TableHead>
-              <TableHead>Куплено</TableHead>
-              <TableHead>Выдано</TableHead>
-              <TableHead>Осталось</TableHead>
-              <TableHead>Цена/шт</TableHead>
-              <TableHead>Остаток предоплаты</TableHead>
-              <TableHead>Дата оплаты</TableHead>
-              <TableHead className="w-24">Действия</TableHead>
+              <TableHead>{t("Клиент")}</TableHead>
+              <TableHead>{t("Гос. номер")}</TableHead>
+              <TableHead>{t("Куплено")}</TableHead>
+              <TableHead>{t("Выдано")}</TableHead>
+              <TableHead>{t("Осталось")}</TableHead>
+              <TableHead>{t("Цена/шт")}</TableHead>
+              <TableHead>{t("Остаток предоплаты")}</TableHead>
+              <TableHead>{t("Дата оплаты")}</TableHead>
+              <TableHead className="w-24">{t("Действия")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -322,10 +321,10 @@ export default function SalesPage() {
               <TableRow key={sale.id}>
                 <TableCell className="font-medium">{sale.client.carBrand}</TableCell>
                 <TableCell className="font-mono">{sale.client.licensePlate}</TableCell>
-                <TableCell>{sale.quantity} шт</TableCell>
-                <TableCell>{sale.deliveredQuantity ?? 0} шт</TableCell>
+                <TableCell>{sale.quantity} {unit}</TableCell>
+                <TableCell>{sale.deliveredQuantity ?? 0} {unit}</TableCell>
                 <TableCell className="font-medium text-orange-600">
-                  {sale.remainingQuantity ?? 0} шт
+                  {sale.remainingQuantity ?? 0} {unit}
                 </TableCell>
                 <TableCell>{formatCurrency(sale.pricePerUnit)}</TableCell>
                 <TableCell className="font-semibold text-blue-600">
@@ -348,7 +347,7 @@ export default function SalesPage() {
                     }}
                   >
                     <Package className="mr-1 h-4 w-4" />
-                    Выдать
+                    {t("Выдать")}
                   </Button>
                 </TableCell>
               </TableRow>
@@ -364,8 +363,8 @@ export default function SalesPage() {
       return (
         <div className="rounded-lg border border-dashed p-12 text-center text-zinc-500">
           {showPeriodInfo
-            ? `Продаж за период «${periodLabel}» пока нет.`
-            : "Нет продаж с не выданным товаром."}
+            ? t("Продаж за период «{period}» пока нет.", { period: t(periodLabel) })
+            : t("Нет продаж с не выданным товаром.")}
         </div>
       );
     }
@@ -375,14 +374,14 @@ export default function SalesPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Дата</TableHead>
-              <TableHead>Клиент</TableHead>
-              <TableHead className="hidden md:table-cell">Гос. номер</TableHead>
-              <TableHead>Куплено</TableHead>
-              <TableHead>Выдано</TableHead>
-              <TableHead>Осталось</TableHead>
-              <TableHead>Итого</TableHead>
-              <TableHead className="w-40">Действия</TableHead>
+              <TableHead>{t("Дата")}</TableHead>
+              <TableHead>{t("Клиент")}</TableHead>
+              <TableHead className="hidden md:table-cell">{t("Гос. номер")}</TableHead>
+              <TableHead>{t("Куплено")}</TableHead>
+              <TableHead>{t("Выдано")}</TableHead>
+              <TableHead>{t("Осталось")}</TableHead>
+              <TableHead>{t("Итого")}</TableHead>
+              <TableHead className="w-40">{t("Действия")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -395,12 +394,12 @@ export default function SalesPage() {
                 <TableCell className="hidden md:table-cell font-mono">
                   {sale.client.licensePlate}
                 </TableCell>
-                <TableCell>{sale.quantity} шт</TableCell>
-                <TableCell>{sale.deliveredQuantity ?? sale.quantity} шт</TableCell>
+                <TableCell>{sale.quantity} {unit}</TableCell>
+                <TableCell>{sale.deliveredQuantity ?? sale.quantity} {unit}</TableCell>
                 <TableCell>
                   {sale.paymentType === "prepayment" && (sale.remainingQuantity ?? 0) > 0 ? (
                     <span className="font-medium text-orange-600">
-                      {sale.remainingQuantity} шт
+                      {sale.remainingQuantity} {unit}
                     </span>
                   ) : (
                     "—"
@@ -415,7 +414,7 @@ export default function SalesPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        title="Выдать товар"
+                        title={t("Выдать товар")}
                         onClick={() => {
                           setActionSale(sale);
                           setDeliverQty(String(sale.remainingQuantity));
@@ -428,10 +427,10 @@ export default function SalesPage() {
                         <Package className="h-4 w-4 text-orange-600" />
                       </Button>
                     )}
-                    <Button variant="ghost" size="icon" title="Детали" onClick={() => openDetails(sale)}>
+                    <Button variant="ghost" size="icon" title={t("Детали")} onClick={() => openDetails(sale)}>
                       <Eye className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" title="Печать" onClick={() => printReceipt(sale)}>
+                    <Button variant="ghost" size="icon" title={t("Печать")} onClick={() => printReceipt(sale, locale)}>
                       <Printer className="h-4 w-4" />
                     </Button>
                     <Button variant="ghost" size="icon" onClick={() => openEdit(sale)}>
@@ -451,44 +450,44 @@ export default function SalesPage() {
   }
 
   if (loading) {
-    return <div className="flex h-64 items-center justify-center text-zinc-500">Загрузка...</div>;
+    return <div className="flex h-64 items-center justify-center text-zinc-500">{t("Загрузка...")}</div>;
   }
 
   return (
     <div>
       <PageHeader
-        title="Продажи"
-        description="Оформление продаж и выдача предоплаченного товара"
+        title={t("Продажи")}
+        description={t("Оформление продаж и выдача предоплаченного товара")}
         userName={userName}
         action={
           <Button onClick={openCreate} className="bg-orange-500 hover:bg-orange-600">
             <Plus className="mr-2 h-4 w-4" />
-            Новая продажа
+            {t("Новая продажа")}
           </Button>
         }
       />
 
       <Tabs value={tab} onValueChange={(value) => setTab(value as "sales" | "pending")}>
         <TabsList className="mb-4">
-          <TabsTrigger value="sales">Реестр продаж</TabsTrigger>
+          <TabsTrigger value="sales">{t("Реестр продаж")}</TabsTrigger>
           <TabsTrigger value="pending">
-            Остатки клиентов ({pendingSales.length})
+            {t("Остатки клиентов")} ({pendingSales.length})
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="sales" className="space-y-4">
           <div className="flex flex-col gap-4 rounded-lg border bg-white p-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className="text-sm font-medium text-zinc-700">Период: {periodLabel}</p>
-              <p className="text-xs text-zinc-500">Показаны продажи только за выбранный период</p>
+              <p className="text-sm font-medium text-zinc-700">{t("Период")}: {t(periodLabel)}</p>
+              <p className="text-xs text-zinc-500">{t("Показаны продажи только за выбранный период")}</p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
               <div className="grid gap-1">
-                <Label className="text-xs text-zinc-500">Период</Label>
+                <Label className="text-xs text-zinc-500">{t("Период")}</Label>
                 <LabeledSelect
                   value={period}
                   onValueChange={setPeriod}
-                  options={PERIOD_OPTIONS}
+                  options={periodOptions}
                   triggerClassName="w-48"
                 />
               </div>
@@ -506,7 +505,7 @@ export default function SalesPage() {
           <div className="relative max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
             <Input
-              placeholder="Поиск по марке или номеру..."
+              placeholder={t("Поиск по марке или номеру...")}
               className="pl-9"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -518,8 +517,7 @@ export default function SalesPage() {
 
         <TabsContent value="pending" className="space-y-4">
           <div className="rounded-lg border bg-orange-50 p-4 text-sm text-orange-900">
-            Здесь показаны предоплаченные продажи, по которым клиенту ещё не выдан весь товар.
-            Это товарный остаток, отдельно от денежного долга клиента.
+            {t("Здесь показаны предоплаченные продажи, по которым клиенту ещё не выдан весь товар. Это товарный остаток, отдельно от денежного долга клиента.")}
           </div>
           {renderPendingTable(pendingSales)}
         </TabsContent>
@@ -528,16 +526,16 @@ export default function SalesPage() {
       <Dialog open={deliverOpen} onOpenChange={setDeliverOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Выдача товара</DialogTitle>
+            <DialogTitle>{t("Выдача товара")}</DialogTitle>
           </DialogHeader>
           {actionSale && (
             <div className="space-y-4 py-2">
               <p className="text-sm text-zinc-600">
-                {actionSale.client.carBrand} · куплено {actionSale.quantity} шт, осталось{" "}
-                {actionSale.remainingQuantity} шт
+                {actionSale.client.carBrand} · {t("Куплено").toLowerCase()} {actionSale.quantity} {unit}, {t("Осталось").toLowerCase()}{" "}
+                {actionSale.remainingQuantity} {unit}
               </p>
               <div className="grid gap-2">
-                <Label>Количество, шт</Label>
+                <Label>{t("Количество, шт")}</Label>
                 <Input
                   type="number"
                   min={1}
@@ -547,7 +545,7 @@ export default function SalesPage() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label>Гос. номер автомобиля</Label>
+                <Label>{t("Гос. номер автомобиля")}</Label>
                 <Input
                   value={deliverPlate}
                   onChange={(e) => setDeliverPlate(e.target.value.toUpperCase())}
@@ -555,16 +553,16 @@ export default function SalesPage() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label>Комментарий</Label>
+                <Label>{t("Комментарий")}</Label>
                 <Textarea value={deliverNote} onChange={(e) => setDeliverNote(e.target.value)} />
               </div>
               {actionError && <p className="text-sm text-red-600">{actionError}</p>}
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeliverOpen(false)}>Отмена</Button>
+            <Button variant="outline" onClick={() => setDeliverOpen(false)}>{t("Отмена")}</Button>
             <Button className="bg-orange-500 hover:bg-orange-600" onClick={handleDeliver}>
-              Выдать
+              {t("Выдать")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -575,34 +573,34 @@ export default function SalesPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <History className="h-4 w-4" />
-              Детали продажи
+              {t("Детали продажи")}
             </DialogTitle>
           </DialogHeader>
           {detailSale && (
             <div className="space-y-4 py-2">
               <div className="grid gap-2 rounded-lg bg-zinc-50 p-4 text-sm sm:grid-cols-2">
-                <p><span className="text-zinc-500">Клиент:</span> {detailSale.client.carBrand}</p>
-                <p><span className="text-zinc-500">Гос. номер:</span> {detailSale.client.licensePlate}</p>
-                <p><span className="text-zinc-500">Оплачено:</span> {formatCurrency(detailSale.paidAmount ?? detailSale.totalPrice)}</p>
-                <p><span className="text-zinc-500">Куплено:</span> {detailSale.quantity} шт</p>
-                <p><span className="text-zinc-500">Выдано:</span> {detailSale.deliveredQuantity ?? 0} шт</p>
-                <p><span className="text-zinc-500">Осталось:</span> {detailSale.remainingQuantity ?? 0} шт</p>
-                <p><span className="text-zinc-500">Цена/шт:</span> {formatCurrency(detailSale.pricePerUnit)}</p>
-                <p><span className="text-zinc-500">Сумма продажи:</span> {formatCurrency(detailSale.totalPrice)}</p>
+                <p><span className="text-zinc-500">{t("Клиент")}:</span> {detailSale.client.carBrand}</p>
+                <p><span className="text-zinc-500">{t("Гос. номер")}:</span> {detailSale.client.licensePlate}</p>
+                <p><span className="text-zinc-500">{t("Оплачено")}:</span> {formatCurrency(detailSale.paidAmount ?? detailSale.totalPrice)}</p>
+                <p><span className="text-zinc-500">{t("Куплено")}:</span> {detailSale.quantity} {unit}</p>
+                <p><span className="text-zinc-500">{t("Выдано")}:</span> {detailSale.deliveredQuantity ?? 0} {unit}</p>
+                <p><span className="text-zinc-500">{t("Осталось")}:</span> {detailSale.remainingQuantity ?? 0} {unit}</p>
+                <p><span className="text-zinc-500">{t("Цена/шт")}:</span> {formatCurrency(detailSale.pricePerUnit)}</p>
+                <p><span className="text-zinc-500">{t("Сумма продажи")}:</span> {formatCurrency(detailSale.totalPrice)}</p>
               </div>
 
               <div>
-                <h3 className="mb-2 text-sm font-medium">История выдач</h3>
+                <h3 className="mb-2 text-sm font-medium">{t("История выдач")}</h3>
                 {(detailSale.goodsDeliveries?.length ?? 0) === 0 ? (
-                  <p className="text-sm text-zinc-500">Выдач пока нет</p>
+                  <p className="text-sm text-zinc-500">{t("Выдач пока нет")}</p>
                 ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Дата</TableHead>
-                        <TableHead>Кол-во</TableHead>
-                        <TableHead>Гос. номер</TableHead>
-                        <TableHead>Оператор</TableHead>
+                        <TableHead>{t("Дата")}</TableHead>
+                        <TableHead>{t("Кол-во")}</TableHead>
+                        <TableHead>{t("Гос. номер")}</TableHead>
+                        <TableHead>{t("Оператор")}</TableHead>
                         <TableHead className="w-12" />
                       </TableRow>
                     </TableHeader>
@@ -610,7 +608,7 @@ export default function SalesPage() {
                       {detailSale.goodsDeliveries?.map((delivery) => (
                         <TableRow key={delivery.id}>
                           <TableCell className="text-xs">{formatDateTime(delivery.createdAt)}</TableCell>
-                          <TableCell>{delivery.quantity} шт</TableCell>
+                          <TableCell>{delivery.quantity} {unit}</TableCell>
                           <TableCell className="font-mono">{delivery.licensePlate}</TableCell>
                           <TableCell>{delivery.user.displayName}</TableCell>
                           <TableCell>
@@ -636,7 +634,7 @@ export default function SalesPage() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[92vh] w-[calc(100vw-1.5rem)] max-w-[72rem] overflow-y-auto sm:max-w-[72rem]">
           <DialogHeader>
-            <DialogTitle>{editing ? "Редактировать продажу" : "Новая продажа"}</DialogTitle>
+            <DialogTitle>{editing ? t("Редактировать продажу") : t("Новая продажа")}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-2">
             {!editing && (
@@ -648,7 +646,7 @@ export default function SalesPage() {
                   onClick={() => setMode("new")}
                   className={mode === "new" ? "bg-orange-500 hover:bg-orange-600" : ""}
                 >
-                  Новый клиент
+                  {t("Новый клиент")}
                 </Button>
                 <Button
                   type="button"
@@ -657,14 +655,14 @@ export default function SalesPage() {
                   onClick={() => setMode("existing")}
                   className={mode === "existing" ? "bg-orange-500 hover:bg-orange-600" : ""}
                 >
-                  Из базы
+                  {t("Из базы")}
                 </Button>
               </div>
             )}
 
             {!editing && mode === "existing" ? (
               <div className="grid gap-2">
-                <Label>Клиент</Label>
+                <Label>{t("Клиент")}</Label>
                 <LabeledSelect
                   value={form.clientId}
                   onValueChange={(value) => {
@@ -679,7 +677,7 @@ export default function SalesPage() {
                     });
                   }}
                   options={clientOptions}
-                  placeholder="Выберите клиента"
+                  placeholder={t("Выберите клиента")}
                   triggerClassName="w-full"
                 />
               </div>
@@ -687,7 +685,7 @@ export default function SalesPage() {
               <>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="grid gap-2">
-                    <Label>Марка авто *</Label>
+                    <Label>{t("Марка авто *")}</Label>
                     <Input
                       value={form.carBrand}
                       onChange={(e) => setForm({ ...form, carBrand: e.target.value })}
@@ -695,7 +693,7 @@ export default function SalesPage() {
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label>Гос. номер *</Label>
+                    <Label>{t("Гос. номер *")}</Label>
                     <Input
                       value={form.licensePlate}
                       onChange={(e) => onPlateChange(e.target.value)}
@@ -714,7 +712,7 @@ export default function SalesPage() {
                 </div>
                 {!editing && (
                   <div className="grid gap-2">
-                    <Label>Телефон</Label>
+                    <Label>{t("Телефон")}</Label>
                     <Input
                       value={form.phone}
                       onChange={(e) => setForm({ ...form, phone: e.target.value })}
@@ -725,12 +723,12 @@ export default function SalesPage() {
             )}
 
             <div className="rounded-lg bg-zinc-50 p-3">
-              <p className="text-sm font-medium">Товар: Шлакоблок</p>
+              <p className="text-sm font-medium">{t("Товар: Шлакоблок")}</p>
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="grid gap-2">
-                <Label>Кол-во, шт *</Label>
+                <Label>{t("Кол-во, шт *")}</Label>
                 <Input
                   type="number"
                   min={1}
@@ -748,7 +746,7 @@ export default function SalesPage() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label>Цена/шт, сум *</Label>
+                <Label>{t("Цена/шт, сум *")}</Label>
                 <Input
                   type="number"
                   min={1}
@@ -766,7 +764,7 @@ export default function SalesPage() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label>Итого, сум</Label>
+                <Label>{t("Итого, сум")}</Label>
                 <Input
                   type="number"
                   min={1}
@@ -779,28 +777,28 @@ export default function SalesPage() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
-                <Label>Реально оплаченная сумма, сум *</Label>
+                <Label>{t("Реально оплаченная сумма, сум *")}</Label>
                 <Input
                   type="number"
                   min={0}
                   value={form.paidAmount}
                   onChange={(e) => setForm({ ...form, paidAmount: e.target.value })}
-                  placeholder="Сколько клиент заплатил сейчас"
+                  placeholder={t("Сколько клиент заплатил сейчас")}
                   className="font-semibold"
                   required
                 />
                 <p className="text-xs text-zinc-500">
-                  Это приход денег в кассу. Долг или предоплата считаются в карточке клиента.
+                  {t("Это приход денег в кассу. Долг или предоплата считаются в карточке клиента.")}
                 </p>
               </div>
               <div className="rounded-lg bg-zinc-50 p-3 text-sm">
-                <p>Итого по товару: <b>{form.totalPrice || "0"} сум</b></p>
+                <p>{t("Итого по товару")}: <b>{form.totalPrice || "0"} {currencyName}</b></p>
                 <p className="mt-1">
                   {Number(form.paidAmount || 0) < Number(form.totalPrice || 0)
-                    ? `Долг клиента: ${Number(form.totalPrice || 0) - Number(form.paidAmount || 0)} сум`
+                    ? `${t("Долг клиента")}: ${Number(form.totalPrice || 0) - Number(form.paidAmount || 0)} ${currencyName}`
                     : Number(form.paidAmount || 0) > Number(form.totalPrice || 0)
-                      ? `Предоплата/переплата: ${Number(form.paidAmount || 0) - Number(form.totalPrice || 0)} сум`
-                      : "Оплачено полностью"}
+                      ? `${t("Предоплата/переплата")}: ${Number(form.paidAmount || 0) - Number(form.totalPrice || 0)} ${currencyName}`
+                      : t("Оплачено полностью")}
                 </p>
               </div>
             </div>
@@ -809,15 +807,14 @@ export default function SalesPage() {
               <div className="grid gap-4 rounded-lg border border-orange-200 bg-orange-50 p-4 sm:grid-cols-2">
                 <div className="sm:col-span-2">
                   <p className="text-sm font-medium text-orange-900">
-                    Выдача товара сейчас (необязательно)
+                    {t("Выдача товара сейчас (необязательно)")}
                   </p>
                   <p className="text-xs text-orange-800">
-                    Если оставить пустым — при долге выдаётся весь товар, при полной оплате тоже весь.
-                    Укажите меньше купленного, если клиент забирает частями (остаток — во вкладке «Остатки клиентов»).
+                    {t("Если оставить пустым — при долге выдаётся весь товар, при полной оплате тоже весь. Укажите меньше купленного, если клиент забирает частями (остаток — во вкладке «Остатки клиентов»).")}
                   </p>
                 </div>
                 <div className="grid gap-2">
-                  <Label>Выдать сейчас, шт</Label>
+                  <Label>{t("Выдать сейчас, шт")}</Label>
                   <Input
                     type="number"
                     min={0}
@@ -829,7 +826,7 @@ export default function SalesPage() {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label>Гос. номер при выдаче</Label>
+                  <Label>{t("Гос. номер при выдаче")}</Label>
                   <Input
                     value={form.initialDeliveryPlate}
                     onChange={(e) =>
@@ -845,7 +842,7 @@ export default function SalesPage() {
             )}
 
             <div className="grid gap-2">
-              <Label>Примечание</Label>
+              <Label>{t("Примечание")}</Label>
               <Textarea
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
@@ -853,14 +850,14 @@ export default function SalesPage() {
             </div>
           </div>
           <DialogFooter className="flex-col gap-2 sm:flex-row">
-            <Button variant="outline" onClick={() => setOpen(false)}>Отмена</Button>
+            <Button variant="outline" onClick={() => setOpen(false)}>{t("Отмена")}</Button>
             {!editing && (
               <Button
                 onClick={() => handleSave(true)}
                 className="bg-orange-500 hover:bg-orange-600"
               >
                 <Printer className="mr-2 h-4 w-4" />
-                Сохранить и печать
+                {t("Сохранить и печать")}
               </Button>
             )}
             <Button
@@ -868,7 +865,7 @@ export default function SalesPage() {
               variant={editing ? "default" : "outline"}
               className={editing ? "bg-orange-500 hover:bg-orange-600" : ""}
             >
-              {editing ? "Сохранить" : "Только сохранить"}
+              {editing ? t("Сохранить") : t("Только сохранить")}
             </Button>
           </DialogFooter>
         </DialogContent>

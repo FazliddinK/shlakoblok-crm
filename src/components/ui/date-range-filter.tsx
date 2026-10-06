@@ -1,5 +1,6 @@
 "use client";
 
+import { useI18n } from "@/components/i18n-provider";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { todayDateString } from "@/lib/dates";
@@ -21,10 +22,12 @@ export function DateRangeFilter({
   showTodayButton,
   onToday,
 }: DateRangeFilterProps) {
+  const { t } = useI18n();
+
   return (
     <div className="flex flex-wrap items-end gap-3">
       <div className="grid gap-1">
-        <Label className="text-xs text-zinc-500">С</Label>
+        <Label className="text-xs text-zinc-500">{t("С")}</Label>
         <Input
           type="date"
           value={from}
@@ -33,7 +36,7 @@ export function DateRangeFilter({
         />
       </div>
       <div className="grid gap-1">
-        <Label className="text-xs text-zinc-500">По</Label>
+        <Label className="text-xs text-zinc-500">{t("По")}</Label>
         <Input
           type="date"
           value={to}
@@ -47,7 +50,7 @@ export function DateRangeFilter({
           onClick={onToday}
           className="rounded-md border px-3 py-2 text-sm hover:bg-zinc-50"
         >
-          Сегодня
+          {t("Сегодня")}
         </button>
       )}
     </div>

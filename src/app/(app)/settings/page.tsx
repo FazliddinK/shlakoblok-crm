@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatCurrency } from "@/lib/labels";
+import { useI18n } from "@/components/i18n-provider";
 import { DateRangeFilter } from "@/components/ui/date-range-filter";
 import { todayDateString } from "@/lib/dates";
 import {
@@ -19,7 +19,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { LabeledSelect } from "@/components/ui/labeled-select";
-import { ROLE_LABELS } from "@/lib/constants";
+
 import {
   Table,
   TableBody,
@@ -39,6 +39,7 @@ interface UserRow {
 }
 
 export default function SettingsPage() {
+  const { t, formatCurrency } = useI18n();
   const [userName, setUserName] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -112,7 +113,7 @@ export default function SettingsPage() {
     setPasswordError("");
 
     if (newPassword !== confirmPassword) {
-      setPasswordError("Пароли не совпадают");
+      setPasswordError(t("Пароли не совпадают"));
       return;
     }
 
@@ -126,12 +127,12 @@ export default function SettingsPage() {
     setPasswordLoading(false);
 
     if (res.ok) {
-      setPasswordMsg("Пароль успешно изменён");
+      setPasswordMsg(t("Пароль успешно изменён"));
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
     } else {
-      setPasswordError(data.error || "Ошибка смены пароля");
+      setPasswordError(t(data.error || "Ошибка смены пароля"));
     }
   }
 
@@ -149,10 +150,10 @@ export default function SettingsPage() {
     if (res.ok) {
       setAddOpen(false);
       setNewUserForm({ username: "", displayName: "", password: "", role: "operator" });
-      setUserMsg(`Пользователь ${data.displayName} добавлен`);
+      setUserMsg(`${t("Пользователь")} ${data.displayName} ${t("добавлен")}`);
       load();
     } else {
-      setUserError(data.error || "Ошибка создания");
+      setUserError(t(data.error || "Ошибка создания"));
     }
   }
 
@@ -172,9 +173,9 @@ export default function SettingsPage() {
       setResetOpen(false);
       setResetPassword("");
       setResetUser(null);
-      setUserMsg(`Пароль пользователя ${resetUser.displayName} изменён`);
+      setUserMsg(`${t("Пароль пользователя")} ${resetUser.displayName} ${t("изменён")}`);
     } else {
-      setUserError(data.error || "Ошибка");
+      setUserError(t(data.error || "Ошибка"));
     }
   }
 
@@ -193,10 +194,10 @@ export default function SettingsPage() {
     setFinanceLoading(false);
 
     if (res.ok) {
-      setFinanceMsg("Начальный остаток сохранён");
+      setFinanceMsg(t("Начальный остаток сохранён"));
       load();
     } else {
-      setFinanceError(data.error || "Ошибка сохранения");
+      setFinanceError(t(data.error || "Ошибка сохранения"));
     }
   }
 
@@ -223,27 +224,27 @@ export default function SettingsPage() {
   }
 
   async function handleDeleteUser(id: string, name: string) {
-    if (!confirm(`Удалить пользователя ${name}?`)) return;
+    if (!confirm(`${t("Удалить пользователя")} ${name}?`)) return;
 
     const res = await fetch(`/api/users/${id}`, { method: "DELETE" });
     if (res.ok) {
-      setUserMsg(`Пользователь ${name} удалён`);
+      setUserMsg(`${t("Пользователь")} ${name} ${t("удалён")}`);
       load();
     } else {
       const data = await res.json();
-      setUserError(data.error || "Ошибка удаления");
+      setUserError(t(data.error || "Ошибка удаления"));
     }
   }
 
   if (loading) {
-    return <div className="flex h-64 items-center justify-center text-zinc-500">Загрузка...</div>;
+    return <div className="flex h-64 items-center justify-center text-zinc-500">{t("Загрузка...")}</div>;
   }
 
   return (
     <div>
       <PageHeader
-        title="Настройки"
-        description="Пароль, касса, экспорт и пользователи"
+        title={t("Настройки")}
+        description={t("Пароль, касса, экспорт и пользователи")}
         userName={userName}
       />
 
@@ -274,13 +275,12 @@ export default function SettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <FileDown className="h-4 w-4 text-orange-500" />
-              Экспорт в Excel
+              {t("Экспорт в Excel")}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-zinc-500">
-              Скачать все данные программы: продажи, расходы, клиенты, погашения долга,
-              пользователи и сводку.
+              {t("Скачать все данные программы: продажи, расходы, клиенты, погашения долга, пользователи и сводку.")}
             </p>
             <DateRangeFilter
               from={exportFrom}
@@ -295,14 +295,14 @@ export default function SettingsPage() {
                 className="bg-orange-500 hover:bg-orange-600"
               >
                 <FileDown className="mr-2 h-4 w-4" />
-                Скачать за период
+                {t("Скачать за период")}
               </Button>
               <Button
                 variant="outline"
                 onClick={() => handleExport(true)}
                 disabled={exportLoading}
               >
-                Скачать всё
+                {t("Скачать всё")}
               </Button>
             </div>
           </CardContent>
@@ -313,23 +313,22 @@ export default function SettingsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <Wallet className="h-4 w-4 text-orange-500" />
-                Начальный остаток кассы
+                {t("Начальный остаток кассы")}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSaveOpeningBalance} className="space-y-4">
                 <p className="text-sm text-zinc-500">
-                  Сумма в кассе на начало работы. Текущий остаток считается так:
-                  начальный остаток + оплаченные продажи, предоплаты и погашения долга − расходы.
+                  {t("Сумма в кассе на начало работы. Текущий остаток считается так: начальный остаток + оплаченные продажи, предоплаты и погашения долга − расходы.")}
                 </p>
                 {cashBalance !== null && (
                   <p className="rounded-lg bg-zinc-50 px-3 py-2 text-sm">
-                    Сейчас в кассе:{" "}
+                    {t("Сейчас в кассе")}:{" "}
                     <span className="font-semibold">{formatCurrency(cashBalance)}</span>
                   </p>
                 )}
                 <div className="space-y-2">
-                  <Label htmlFor="openingBalance">Начальный остаток, сум</Label>
+                  <Label htmlFor="openingBalance">{t("Начальный остаток, сум")}</Label>
                   <Input
                     id="openingBalance"
                     type="number"
@@ -344,7 +343,7 @@ export default function SettingsPage() {
                   className="bg-orange-500 hover:bg-orange-600"
                   disabled={financeLoading}
                 >
-                  Сохранить остаток
+                  {t("Сохранить остаток")}
                 </Button>
               </form>
             </CardContent>
@@ -355,13 +354,13 @@ export default function SettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <KeyRound className="h-4 w-4 text-orange-500" />
-              Смена пароля
+              {t("Смена пароля")}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleChangePassword} className="space-y-4">
               <div className="space-y-2">
-                <Label>Текущий пароль</Label>
+                <Label>{t("Текущий пароль")}</Label>
                 <Input
                   type="password"
                   value={currentPassword}
@@ -370,7 +369,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Новый пароль</Label>
+                <Label>{t("Новый пароль")}</Label>
                 <Input
                   type="password"
                   value={newPassword}
@@ -380,7 +379,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Подтверждение пароля</Label>
+                <Label>{t("Подтверждение пароля")}</Label>
                 <Input
                   type="password"
                   value={confirmPassword}
@@ -396,7 +395,7 @@ export default function SettingsPage() {
                 className="bg-orange-500 hover:bg-orange-600"
                 disabled={passwordLoading}
               >
-                Сменить пароль
+                {t("Сменить пароль")}
               </Button>
             </form>
           </CardContent>
@@ -407,7 +406,7 @@ export default function SettingsPage() {
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="flex items-center gap-2 text-base">
                 <UserPlus className="h-4 w-4 text-orange-500" />
-                Пользователи
+                {t("Пользователи")}
               </CardTitle>
               <Button
                 size="sm"
@@ -415,20 +414,20 @@ export default function SettingsPage() {
                 className="bg-orange-500 hover:bg-orange-600"
               >
                 <Plus className="mr-1 h-4 w-4" />
-                Добавить
+                {t("Добавить")}
               </Button>
             </CardHeader>
             <CardContent>
               {users.length === 0 ? (
-                <p className="text-sm text-zinc-500">Пользователей нет</p>
+                <p className="text-sm text-zinc-500">{t("Пользователей нет")}</p>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Имя</TableHead>
-                      <TableHead>Логин</TableHead>
-                      <TableHead>Роль</TableHead>
-                      <TableHead className="w-24">Действия</TableHead>
+                      <TableHead>{t("Имя")}</TableHead>
+                      <TableHead>{t("Логин")}</TableHead>
+                      <TableHead>{t("Роль")}</TableHead>
+                      <TableHead className="w-24">{t("Действия")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -440,10 +439,10 @@ export default function SettingsPage() {
                           <Badge variant={user.role === "admin" ? "default" : "secondary"}>
                             {user.role === "admin" ? (
                               <span className="flex items-center gap-1">
-                                <Shield className="h-3 w-3" /> Админ
+                                <Shield className="h-3 w-3" /> {t("Админ")}
                               </span>
                             ) : (
-                              "Оператор"
+                              t("Оператор")
                             )}
                           </Badge>
                         </TableCell>
@@ -452,7 +451,7 @@ export default function SettingsPage() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              title="Сменить пароль"
+                              title={t("Сменить пароль")}
                               onClick={() => {
                                 setResetUser(user);
                                 setResetPassword("");
@@ -464,7 +463,7 @@ export default function SettingsPage() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              title="Удалить"
+                              title={t("Удалить")}
                               onClick={() => handleDeleteUser(user.id, user.displayName)}
                             >
                               <Trash2 className="h-4 w-4 text-red-500" />
@@ -484,21 +483,21 @@ export default function SettingsPage() {
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Новый пользователь</DialogTitle>
+            <DialogTitle>{t("Новый пользователь")}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-2">
             <div className="grid gap-2">
-              <Label>Имя *</Label>
+              <Label>{t("Имя *")}</Label>
               <Input
                 value={newUserForm.displayName}
                 onChange={(e) =>
                   setNewUserForm({ ...newUserForm, displayName: e.target.value })
                 }
-                placeholder="Иван Петров"
+                placeholder={t("Иван Петров")}
               />
             </div>
             <div className="grid gap-2">
-              <Label>Логин *</Label>
+              <Label>{t("Логин *")}</Label>
               <Input
                 value={newUserForm.username}
                 onChange={(e) =>
@@ -509,7 +508,7 @@ export default function SettingsPage() {
               />
             </div>
             <div className="grid gap-2">
-              <Label>Пароль *</Label>
+              <Label>{t("Пароль *")}</Label>
               <Input
                 type="password"
                 value={newUserForm.password}
@@ -520,22 +519,22 @@ export default function SettingsPage() {
               />
             </div>
             <div className="grid gap-2">
-              <Label>Роль</Label>
+              <Label>{t("Роль")}</Label>
               <LabeledSelect
                 value={newUserForm.role}
                 onValueChange={(value) => setNewUserForm({ ...newUserForm, role: value })}
                 options={[
-                  { value: "operator", label: ROLE_LABELS.operator },
-                  { value: "admin", label: ROLE_LABELS.admin },
+                  { value: "operator", label: t("Оператор") },
+                  { value: "admin", label: t("Администратор") },
                 ]}
                 triggerClassName="w-full"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddOpen(false)}>Отмена</Button>
+            <Button variant="outline" onClick={() => setAddOpen(false)}>{t("Отмена")}</Button>
             <Button onClick={handleAddUser} className="bg-orange-500 hover:bg-orange-600">
-              Создать
+              {t("Создать")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -545,11 +544,11 @@ export default function SettingsPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              Сменить пароль: {resetUser?.displayName}
+              {t("Сменить пароль")}: {resetUser?.displayName}
             </DialogTitle>
           </DialogHeader>
           <div className="grid gap-2 py-2">
-            <Label>Новый пароль</Label>
+            <Label>{t("Новый пароль")}</Label>
             <Input
               type="password"
               value={resetPassword}
@@ -558,9 +557,9 @@ export default function SettingsPage() {
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setResetOpen(false)}>Отмена</Button>
+            <Button variant="outline" onClick={() => setResetOpen(false)}>{t("Отмена")}</Button>
             <Button onClick={handleResetPassword} className="bg-orange-500 hover:bg-orange-600">
-              Сохранить
+              {t("Сохранить")}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -14,6 +14,8 @@ import {
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/components/i18n-provider";
+import { LanguageSwitcher } from "@/components/language-switcher";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 const navItems = [
@@ -27,6 +29,7 @@ const navItems = [
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const { t } = useI18n();
 
   return (
     <nav className="flex flex-col gap-1">
@@ -45,7 +48,7 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
             )}
           >
             <Icon className="h-4 w-4 shrink-0" />
-            {label}
+            {t(label)}
           </Link>
         );
       })}
@@ -55,6 +58,7 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
 
 export function Sidebar({ userName }: { userName: string }) {
   const router = useRouter();
+  const { t } = useI18n();
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -77,13 +81,14 @@ export function Sidebar({ userName }: { userName: string }) {
         <NavLinks />
       </div>
       <div className="border-t border-zinc-800 px-4 py-4">
+        <LanguageSwitcher className="mb-3 w-full justify-center" />
         <p className="mb-2 truncate px-3 text-xs text-zinc-400">{userName}</p>
         <button
           onClick={logout}
           className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-white"
         >
           <LogOut className="h-4 w-4" />
-          Выйти
+          {t("Выйти")}
         </button>
       </div>
     </aside>
@@ -92,6 +97,7 @@ export function Sidebar({ userName }: { userName: string }) {
 
 export function MobileNav({ userName }: { userName: string }) {
   const router = useRouter();
+  const { t } = useI18n();
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -118,13 +124,14 @@ export function MobileNav({ userName }: { userName: string }) {
           <NavLinks />
         </div>
         <div className="border-t border-zinc-800 px-4 py-4">
+          <LanguageSwitcher className="mb-3 w-full justify-center" />
           <p className="mb-2 truncate px-3 text-xs text-zinc-400">{userName}</p>
           <button
             onClick={logout}
             className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-white"
           >
             <LogOut className="h-4 w-4" />
-            Выйти
+            {t("Выйти")}
           </button>
         </div>
       </SheetContent>

@@ -14,7 +14,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateRangeFilter } from "@/components/ui/date-range-filter";
 import { LabeledSelect } from "@/components/ui/labeled-select";
-import { formatCurrency } from "@/lib/labels";
+import { useI18n } from "@/components/i18n-provider";
 import { REPORT_PERIOD_LABELS, todayDateString } from "@/lib/dates";
 
 interface ReportData {
@@ -32,12 +32,9 @@ interface ReportData {
   cashBalance: number;
 }
 
-const PERIOD_OPTIONS = Object.entries(REPORT_PERIOD_LABELS).map(([value, label]) => ({
-  value,
-  label,
-}));
-
 export default function ReportsPage() {
+  const { t, locale, formatCurrency } = useI18n();
+  const periodOptions = Object.entries(REPORT_PERIOD_LABELS).map(([value, label]) => ({ value, label: t(label) }));
   const [period, setPeriod] = useState("last7");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -79,7 +76,7 @@ export default function ReportsPage() {
   if (loading || !data) {
     return (
       <div className="flex h-64 items-center justify-center text-zinc-500">
-        Загрузка...
+        {t("Загрузка...")}
       </div>
     );
   }
@@ -89,8 +86,8 @@ export default function ReportsPage() {
   return (
     <div>
       <PageHeader
-        title="Отчёты"
-        description="Продажи, касса, долги и расходы"
+        title={t("Отчёты")}
+        description={t("Продажи, касса, долги и расходы")}
         userName={userName}
         action={
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -105,7 +102,7 @@ export default function ReportsPage() {
             <LabeledSelect
               value={period}
               onValueChange={handlePeriodChange}
-              options={PERIOD_OPTIONS}
+              options={periodOptions}
               triggerClassName="w-52"
             />
           </div>
@@ -113,7 +110,7 @@ export default function ReportsPage() {
       />
 
       <p className="mb-6 text-sm text-zinc-600">
-        Период: <span className="font-medium">{data.periodLabel}</span>
+        {t("Период")}: <span className="font-medium">{t(data.periodLabel)}</span>
         <span className="text-zinc-400">
           {" "}
           ({data.from} — {data.to})
@@ -123,55 +120,55 @@ export default function ReportsPage() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi
           icon={<Package className="h-5 w-5 text-orange-500" />}
-          title="Продано товара"
-          value={`${data.soldQuantity.toLocaleString("ru-RU")} шт`}
-          hint="Фактический отпуск со склада (наличка и долг)"
+          title={t("Продано товара")}
+          value={`${data.soldQuantity.toLocaleString(locale === "ru" ? "ru-RU" : "uz-UZ")} ${locale === "ru" ? "шт" : "dona"}`}
+          hint={t("Фактический отпуск со склада (наличка и долг)")}
         />
         <Kpi
           icon={<Banknote className="h-5 w-5 text-green-600" />}
-          title="Сумма проданного товара"
+          title={t("Сумма проданного товара")}
           value={formatCurrency(data.soldAmount)}
-          hint="Итог всех продаж за период"
+          hint={t("Итог всех продаж за период")}
         />
         <Kpi
           icon={<Scale className="h-5 w-5 text-blue-600" />}
-          title="Средняя цена за штуку"
+          title={t("Средняя цена за штуку")}
           value={formatCurrency(data.avgPricePerUnit)}
-          hint="Сумма ÷ количество"
+          hint={t("Сумма ÷ количество")}
         />
         <Kpi
           icon={<Wallet className="h-5 w-5 text-emerald-700" />}
-          title="Фактический остаток в кассе"
+          title={t("Фактический остаток в кассе")}
           value={formatCurrency(data.cashBalance)}
-          hint="Текущий остаток кассы"
+          hint={t("Текущий остаток кассы")}
         />
         <Kpi
           icon={<PiggyBank className="h-5 w-5 text-sky-600" />}
-          title="Предоплаты"
+          title={t("Предоплата")}
           value={formatCurrency(data.prepaymentsTotal)}
-          hint="Сумма предоплат клиентов"
+          hint={t("Сумма предоплат клиентов")}
         />
         <Kpi
           icon={<Users className="h-5 w-5 text-red-500" />}
-          title="Сумма долга"
+          title={t("Сумма долга")}
           value={formatCurrency(data.debtTotal)}
-          hint="Сумма долга клиентов"
+          hint={t("Сумма долга клиентов")}
         />
         <Kpi
           icon={<Receipt className="h-5 w-5 text-rose-500" />}
-          title="Расходы за период"
+          title={t("Расходы за период")}
           value={formatCurrency(data.periodExpenses)}
-          hint="Сумма всех расходов за период"
+          hint={t("Сумма всех расходов за период")}
         />
       </div>
 
       <Card className="mt-6">
         <CardHeader>
-          <CardTitle className="text-base">График продаж по дням</CardTitle>
+          <CardTitle className="text-base">{t("График продаж по дням")}</CardTitle>
         </CardHeader>
         <CardContent>
           {data.dailySales.every((d) => d.amount === 0 && d.quantity === 0) ? (
-            <p className="text-sm text-zinc-500">Нет продаж за выбранный период</p>
+            <p className="text-sm text-zinc-500">{t("Нет продаж за выбранный период")}</p>
           ) : (
             <div className="space-y-3">
               {data.dailySales.map((day) => (
@@ -185,7 +182,7 @@ export default function ReportsPage() {
                       })}
                     </span>
                     <span>
-                      {day.quantity.toLocaleString("ru-RU")} шт ·{" "}
+                      {day.quantity.toLocaleString(locale === "ru" ? "ru-RU" : "uz-UZ")} {locale === "ru" ? "шт" : "dona"} ·{" "}
                       {formatCurrency(day.amount)}
                     </span>
                   </div>
