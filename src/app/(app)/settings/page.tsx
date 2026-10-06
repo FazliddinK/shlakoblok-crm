@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Trash2, KeyRound, UserPlus, Shield, Wallet, FileDown } from "lucide-react";
+import { Plus, Trash2, KeyRound, UserPlus, Shield, Wallet, FileDown, Send } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +36,17 @@ interface UserRow {
   role: string;
   createdAt: string;
   _count: { sales: number };
+}
+
+interface TelegramStatus {
+  configured: boolean;
+  botUsername?: string;
+  botName?: string;
+  chatId?: string;
+  chatTitle?: string;
+  chatType?: string;
+  isBotAdmin?: boolean;
+  error?: string;
 }
 
 export default function SettingsPage() {
@@ -75,6 +86,11 @@ export default function SettingsPage() {
   const [exportTo, setExportTo] = useState("");
   const [exportLoading, setExportLoading] = useState(false);
 
+  const [telegramStatus, setTelegramStatus] = useState<TelegramStatus | null>(null);
+  const [telegramLoading, setTelegramLoading] = useState(false);
+  const [telegramMsg, setTelegramMsg] = useState("");
+  const [telegramError, setTelegramError] = useState("");
+
   const load = useCallback(async () => {
     const [meRes, financeRes] = await Promise.all([
       fetch("/api/auth/me"),
@@ -91,9 +107,15 @@ export default function SettingsPage() {
     }
 
     if (me.user?.role === "admin") {
-      const usersRes = await fetch("/api/users");
+      const [usersRes, telegramRes] = await Promise.all([
+        fetch("/api/users"),
+        fetch("/api/telegram/status"),
+      ]);
       if (usersRes.ok) {
         setUsers(await usersRes.json());
+      }
+      if (telegramRes.ok) {
+        setTelegramStatus(await telegramRes.json());
       }
     }
 
@@ -223,6 +245,25 @@ export default function SettingsPage() {
     setExportLoading(false);
   }
 
+  async function handleTelegramTest() {
+    setTelegramLoading(true);
+    setTelegramMsg("");
+    setTelegramError("");
+
+    const res = await fetch("/api/telegram/test", { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+
+    if (res.ok) {
+      setTelegramMsg(t("Тестовое сообщение отправлено"));
+      const statusRes = await fetch("/api/telegram/status");
+      if (statusRes.ok) setTelegramStatus(await statusRes.json());
+    } else {
+      setTelegramError(t(data.error || "Не удалось отправить тестовое сообщение"));
+    }
+
+    setTelegramLoading(false);
+  }
+
   async function handleDeleteUser(id: string, name: string) {
     if (!confirm(`${t("Удалить пользователя")} ${name}?`)) return;
 
@@ -244,7 +285,7 @@ export default function SettingsPage() {
     <div>
       <PageHeader
         title={t("Настройки")}
-        description={t("Пароль, касса, экспорт и пользователи")}
+        description={t("Пароль, касса, экспорт, Telegram и пользователи")}
         userName={userName}
       />
 
@@ -346,6 +387,92 @@ export default function SettingsPage() {
                   {t("Сохранить остаток")}
                 </Button>
               </form>
+            </CardContent>
+          </Card>
+        )}
+
+
+        {isAdmin && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Send className="h-4 w-4 text-orange-500" />
+                {t("Уведомления Telegram")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {telegramMsg && (
+                <div className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">
+                  {telegramMsg}
+                </div>
+              )}
+              {telegramError && (
+                <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+                  {telegramError}
+                </div>
+              )}
+
+              {!telegramStatus?.configured ? (
+                <div className="space-y-2 text-sm">
+                  <p>
+                    <span className="text-zinc-500">{t("Статус")}:</span>{" "}
+                    <Badge variant="secondary">{t("Не настроено")}</Badge>
+                  </p>
+                  <p className="text-zinc-500">
+                    {t("Укажите TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID в файле .env.")}
+                  </p>
+                </div>
+              ) : (
+                <div className="grid gap-2 text-sm">
+                  <p>
+                    <span className="text-zinc-500">{t("Статус")}:</span>{" "}
+                    <Badge variant={telegramStatus.error ? "secondary" : "default"}>
+                      {telegramStatus.error ? t("Есть ошибка") : t("Подключено")}
+                    </Badge>
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">{t("Бот")}:</span>{" "}
+                    <span className="font-medium">
+                      {telegramStatus.botUsername ? `@${telegramStatus.botUsername}` : telegramStatus.botName || "—"}
+                    </span>
+                  </p>
+                  {telegramStatus.botName && telegramStatus.botUsername && (
+                    <p>
+                      <span className="text-zinc-500">{t("Имя бота")}:</span>{" "}
+                      <span className="font-medium">{telegramStatus.botName}</span>
+                    </p>
+                  )}
+                  <p>
+                    <span className="text-zinc-500">{t("Группа")}:</span>{" "}
+                    <span className="font-medium">{telegramStatus.chatTitle || "—"}</span>
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Chat ID:</span>{" "}
+                    <span className="font-mono">{telegramStatus.chatId || "—"}</span>
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">{t("Бот — администратор")}:</span>{" "}
+                    <Badge variant={telegramStatus.isBotAdmin ? "default" : "secondary"}>
+                      {telegramStatus.isBotAdmin ? t("Да") : t("Нет")}
+                    </Badge>
+                  </p>
+                  {telegramStatus.error && (
+                    <p className="rounded-md bg-amber-50 px-3 py-2 text-amber-800">
+                      {t("Ошибка проверки Telegram")}: {telegramStatus.error}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <Button
+                type="button"
+                onClick={handleTelegramTest}
+                disabled={telegramLoading || !telegramStatus?.configured}
+                className="bg-orange-500 hover:bg-orange-600"
+              >
+                <Send className="mr-2 h-4 w-4" />
+                {t("Отправить тестовое сообщение")}
+              </Button>
             </CardContent>
           </Card>
         )}

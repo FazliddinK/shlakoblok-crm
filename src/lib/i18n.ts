@@ -61,7 +61,6 @@ const UZ_TRANSLATIONS: Record<string, string> = {
   "Период": "Davr",
 
   "Клиент": "Mijoz",
-  "Клиенты": "Mijozlar",
   "Клиентов": "Mijozlar",
   "Новый клиент": "Yangi mijoz",
   "Добавить клиента": "Mijoz qo‘shish",
@@ -101,7 +100,6 @@ const UZ_TRANSLATIONS: Record<string, string> = {
   "Скачать Excel": "Excel yuklab olish",
 
   "Расход": "Xarajat",
-  "Расходы": "Xarajatlar",
   "Новый расход": "Yangi xarajat",
   "Журнал расходов": "Xarajatlar jurnali",
   "Журнал расходных операций": "Xarajat operatsiyalari jurnali",
@@ -321,15 +319,46 @@ const UZ_TRANSLATIONS: Record<string, string> = {
   "У клиента нет долга": "Mijozning qarzi yo‘q",
 
   "Telegram уведомления": "Telegram xabarnomalari",
+  "Уведомления Telegram": "Telegram xabarnomalari",
+  "Пароль, касса, экспорт, Telegram и пользователи": "Parol, kassa, eksport, Telegram va foydalanuvchilar",
   "Бот": "Bot",
+  "Имя бота": "Bot nomi",
   "Группа": "Guruh",
   "Бот — администратор": "Bot — administrator",
   "Статус": "Holat",
   "Подключено": "Ulangan",
   "Не настроено": "Sozlanmagan",
+  "Есть ошибка": "Xatolik bor",
   "Да": "Ha",
   "Нет": "Yo‘q",
-  "Отправить тестовое сообщение": "Sinov xabarini yuborish"
+  "Отправить тестовое сообщение": "Sinov xabarini yuborish",
+  "Тестовое сообщение отправлено": "Sinov xabari yuborildi",
+  "Не удалось отправить тестовое сообщение": "Sinov xabarini yuborib bo‘lmadi",
+  "Ошибка проверки Telegram": "Telegram tekshiruvida xato",
+  "Telegram не настроен": "Telegram sozlanmagan",
+  "Укажите TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID в файле .env.": "TELEGRAM_BOT_TOKEN va TELEGRAM_CHAT_ID qiymatlarini .env faylida kiriting.",
+  "Уведомления Telegram успешно подключены.": "Telegram xabarnomalari muvaffaqiyatli ulandi.",
+  "Время": "Vaqt",
+
+  "Цена": "Narx",
+  "Предоплата полностью закрыта": "Oldindan to‘lov to‘liq yopildi",
+  "Всего": "Jami",
+  "Остаток": "Qoldiq",
+  "Выдано сейчас": "Hozir berildi",
+  "Всего оплачено": "Jami to‘langan",
+  "Всего выдано": "Jami berilgan",
+
+  "создание": "yaratildi",
+  "изменение": "o‘zgartirildi",
+  "удаление": "o‘chirildi",
+  "Клиент (при продаже)": "Mijoz (sotuv vaqtida)",
+  "Продажа шлакоблоков": "Shlakoblok sotuvi",
+  "Откат изменения": "O‘zgarishni qaytarish",
+  "Восстановление данных": "Ma’lumotlarni tiklash",
+  "Окончательное удаление": "Butunlay o‘chirish",
+  "Очистка корзины": "Savatni tozalash",
+  "Исправление выдачи": "Tovar berishni tuzatish",
+  "Удаление выдачи": "Tovar berishni o‘chirish"
 };
 
 function translateDynamicUz(source: string): string | null {
