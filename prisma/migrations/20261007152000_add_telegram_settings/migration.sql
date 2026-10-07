@@ -1,0 +1,2 @@
+ALTER TABLE "AppSettings" ADD COLUMN "telegramBotTokenEnc" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "AppSettings" ADD COLUMN "telegramChatId" TEXT NOT NULL DEFAULT '';

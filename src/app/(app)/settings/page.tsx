@@ -40,6 +40,7 @@ interface UserRow {
 
 interface TelegramStatus {
   configured: boolean;
+  tokenConfigured?: boolean;
   botUsername?: string;
   botName?: string;
   chatId?: string;
@@ -87,7 +88,10 @@ export default function SettingsPage() {
   const [exportLoading, setExportLoading] = useState(false);
 
   const [telegramStatus, setTelegramStatus] = useState<TelegramStatus | null>(null);
+  const [telegramBotToken, setTelegramBotToken] = useState("");
+  const [telegramChatId, setTelegramChatId] = useState("");
   const [telegramLoading, setTelegramLoading] = useState(false);
+  const [telegramSaving, setTelegramSaving] = useState(false);
   const [telegramMsg, setTelegramMsg] = useState("");
   const [telegramError, setTelegramError] = useState("");
 
@@ -115,7 +119,9 @@ export default function SettingsPage() {
         setUsers(await usersRes.json());
       }
       if (telegramRes.ok) {
-        setTelegramStatus(await telegramRes.json());
+        const status = await telegramRes.json();
+        setTelegramStatus(status);
+        setTelegramChatId(status.chatId ?? "");
       }
     }
 
@@ -243,6 +249,33 @@ export default function SettingsPage() {
       URL.revokeObjectURL(url);
     }
     setExportLoading(false);
+  }
+
+  async function handleSaveTelegram() {
+    setTelegramSaving(true);
+    setTelegramMsg("");
+    setTelegramError("");
+
+    const res = await fetch("/api/telegram/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        botToken: telegramBotToken,
+        chatId: telegramChatId,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (res.ok) {
+      setTelegramStatus(data);
+      setTelegramChatId(data.chatId ?? telegramChatId);
+      setTelegramBotToken("");
+      setTelegramMsg(t("Настройки Telegram сохранены"));
+    } else {
+      setTelegramError(t(data.error || "Не удалось сохранить настройки Telegram"));
+    }
+
+    setTelegramSaving(false);
   }
 
   async function handleTelegramTest() {
@@ -412,14 +445,63 @@ export default function SettingsPage() {
                 </div>
               )}
 
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="telegramBotToken">{t("Токен Telegram-бота")}</Label>
+                  <Input
+                    id="telegramBotToken"
+                    type="password"
+                    value={telegramBotToken}
+                    onChange={(e) => setTelegramBotToken(e.target.value)}
+                    placeholder={
+                      telegramStatus?.tokenConfigured
+                        ? t("Токен сохранён. Оставьте пустым, чтобы не менять")
+                        : "123456789:AA..."
+                    }
+                    autoComplete="new-password"
+                  />
+                  <p className="text-xs text-zinc-500">
+                    {t("Токен хранится в зашифрованном виде и никогда не показывается обратно.")}
+                  </p>
+                </div>
+
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="telegramChatId">{t("ID Telegram-группы")}</Label>
+                  <Input
+                    id="telegramChatId"
+                    value={telegramChatId}
+                    onChange={(e) => setTelegramChatId(e.target.value)}
+                    placeholder="-1001234567890"
+                    className="font-mono"
+                  />
+                </div>
+
+                <div className="flex flex-wrap gap-2 sm:col-span-2">
+                  <Button
+                    type="button"
+                    onClick={handleSaveTelegram}
+                    disabled={telegramSaving || !telegramChatId}
+                    className="bg-orange-500 hover:bg-orange-600"
+                  >
+                    {t("Сохранить Telegram")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleTelegramTest}
+                    disabled={telegramLoading || !telegramStatus?.configured}
+                  >
+                    <Send className="mr-2 h-4 w-4" />
+                    {t("Отправить тестовое сообщение")}
+                  </Button>
+                </div>
+              </div>
+
               {!telegramStatus?.configured ? (
                 <div className="space-y-2 text-sm">
                   <p>
                     <span className="text-zinc-500">{t("Статус")}:</span>{" "}
                     <Badge variant="secondary">{t("Не настроено")}</Badge>
-                  </p>
-                  <p className="text-zinc-500">
-                    {t("Укажите TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID в файле .env.")}
                   </p>
                 </div>
               ) : (
@@ -464,15 +546,7 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              <Button
-                type="button"
-                onClick={handleTelegramTest}
-                disabled={telegramLoading || !telegramStatus?.configured}
-                className="bg-orange-500 hover:bg-orange-600"
-              >
-                <Send className="mr-2 h-4 w-4" />
-                {t("Отправить тестовое сообщение")}
-              </Button>
+
             </CardContent>
           </Card>
         )}

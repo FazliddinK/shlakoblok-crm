@@ -23,8 +23,10 @@ model User {
 }
 
 model AppSettings {
-  id             String @id @default("default")
-  openingBalance Float  @default(0)
+  id                  String @id @default("default")
+  openingBalance      Float  @default(0)
+  telegramBotTokenEnc String @default("")
+  telegramChatId      String @default("")
 }
 
 model Client {
