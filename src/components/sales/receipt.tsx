@@ -2,11 +2,8 @@
 
 import type { Sale, Client, User } from "@prisma/client";
 import { useI18n } from "@/components/i18n-provider";
-import { DEFAULT_LOCALE, Locale, translate } from "@/lib/i18n";
-import {
-  formatCurrency as formatCurrencyForLocale,
-  formatDateTime as formatDateTimeForLocale,
-} from "@/lib/labels";
+import { DEFAULT_LOCALE, type Locale, translate } from "@/lib/i18n";
+import { BUSINESS_TIME_ZONE } from "@/lib/dates";
 
 export type SaleWithRelations = Sale & {
   client: Client;
@@ -17,66 +14,118 @@ interface ReceiptProps {
   sale: SaleWithRelations;
 }
 
-const paymentSource: Record<string, string> = {
-  paid: "Оплачено",
-  debt: "В долг",
-  prepayment: "Предоплата",
-};
+// Shared by the on-screen receipt and the separate print window.
+// Values for the product name and quantity are exactly twice the base size.
+const RECEIPT_STYLES = `
+  .simple-receipt, .simple-receipt * { box-sizing: border-box; }
+  .simple-receipt {
+    width: 80mm;
+    max-width: 100%;
+    margin: 0 auto;
+    padding: 3mm;
+    background: #fff;
+    color: #000;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 12pt;
+    font-weight: 400;
+    line-height: 1.25;
+  }
+  .simple-receipt p { margin: 0; }
+  .simple-receipt .receipt-heading {
+    margin-bottom: 3mm;
+    text-align: center;
+    font-size: 18pt;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+  .simple-receipt .receipt-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 2mm;
+    margin-top: 1mm;
+    break-inside: avoid;
+  }
+  .simple-receipt .receipt-row-label { flex-shrink: 0; }
+  .simple-receipt .receipt-row-value {
+    min-width: 0;
+    text-align: right;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+  .simple-receipt .receipt-client { margin-top: 2mm; }
+  .simple-receipt .receipt-section-title { font-weight: 700; }
+  .simple-receipt .receipt-goods {
+    margin-top: 3mm;
+    border-top: 1px solid #000;
+    padding-top: 2mm;
+  }
+  .simple-receipt .receipt-large-field {
+    text-align: center;
+    break-inside: avoid;
+  }
+  .simple-receipt .receipt-large-field + .receipt-large-field { margin-top: 2mm; }
+  .simple-receipt .receipt-large-value {
+    margin-top: 1mm;
+    font-size: 24pt;
+    font-weight: 700;
+    line-height: 1.1;
+    overflow-wrap: anywhere;
+  }
+`;
+
+function formatReceiptDate(value: string | Date): string {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: BUSINESS_TIME_ZONE,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(value));
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? "";
+
+  return `${part("day")}.${part("month")}.${part("year")} ${part("hour")}:${part("minute")}`;
+}
+
+function receiptData(sale: SaleWithRelations, locale: Locale) {
+  return {
+    date: formatReceiptDate(sale.createdAt),
+    operator: sale.user.displayName,
+    carBrand: sale.client.carBrand,
+    licensePlate: sale.client.licensePlate,
+    product: translate(locale, "Шлакоблок"),
+    // Keep the existing quantity source; this is a layout-only change.
+    quantity: `${sale.quantity} ${locale === "ru" ? "шт" : "dona"}`,
+  };
+}
 
 export function Receipt({ sale }: ReceiptProps) {
-  const { t, locale, formatCurrency, formatDateTime } = useI18n();
-  const unit = locale === "ru" ? "шт" : "dona";
+  const { t, locale } = useI18n();
+  const data = receiptData(sale, locale);
 
   return (
-    <div className="receipt-content mx-auto w-[80mm] bg-white p-4 font-mono text-xs text-black">
-      <div className="text-center">
-        <p className="text-sm font-bold">SHLAKOBLOK</p>
-        <p className="text-[10px]">{t("Учёт продаж шлакоблоков")}</p>
-        <p className="mt-1 border-t border-dashed border-black pt-1 text-[10px]">
-          {t("Кассовый чек")}
-        </p>
+    <div className="receipt-content simple-receipt">
+      <style>{RECEIPT_STYLES}</style>
+      <p className="receipt-heading">ШЛАКОБЛОК</p>
+      <Row label={t("Дата")} value={data.date} />
+      <Row label={t("Оператор")} value={data.operator} />
+      <div className="receipt-client">
+        <p className="receipt-section-title">{t("Клиент")}:</p>
+        <Row label={t("Марка авто")} value={data.carBrand} />
+        <Row label={t("Гос. номер")} value={data.licensePlate} />
       </div>
-
-      <div className="mt-3 space-y-1 border-t border-dashed border-black pt-2">
-        <Row label={t("Дата")} value={formatDateTime(sale.createdAt)} />
-        <Row label={t("Чек №")} value={sale.id.slice(-8).toUpperCase()} />
-        <Row label={t("Оператор")} value={sale.user.displayName} />
-      </div>
-
-      <div className="mt-3 space-y-1 border-t border-dashed border-black pt-2">
-        <p className="font-bold">{t("Клиент")}</p>
-        <Row label={t("Марка авто")} value={sale.client.carBrand} />
-        <Row label={t("Гос. номер")} value={sale.client.licensePlate} />
-        {sale.client.phone && <Row label={t("Телефон")} value={sale.client.phone} />}
-      </div>
-
-      <div className="mt-3 space-y-1 border-t border-dashed border-black pt-2">
-        <p className="font-bold">{t("Товар")}</p>
-        <Row label={t("Наименование")} value={t("Шлакоблок")} />
-        <Row label={t("Количество")} value={`${sale.quantity} ${unit}`} />
-        <Row label={t("Цена за шт")} value={formatCurrency(sale.pricePerUnit)} />
-        <Row
-          label={t("Оплата")}
-          value={t(paymentSource[sale.paymentType] ?? sale.paymentType)}
-        />
-      </div>
-
-      <div className="mt-3 border-t border-double border-black pt-2">
-        <div className="flex justify-between text-sm font-bold">
-          <span>{t("ИТОГО")}:</span>
-          <span>{formatCurrency(sale.totalPrice)}</span>
+      <div className="receipt-goods">
+        <div className="receipt-large-field">
+          <p>{t("Наименование")}:</p>
+          <p className="receipt-large-value">{data.product}</p>
         </div>
-      </div>
-
-      {sale.notes && (
-        <div className="mt-2 border-t border-dashed border-black pt-2">
-          <p className="text-[10px]">{t("Примечание")}: {sale.notes}</p>
+        <div className="receipt-large-field">
+          <p>{t("Количество")}:</p>
+          <p className="receipt-large-value">{data.quantity}</p>
         </div>
-      )}
-
-      <div className="mt-4 text-center text-[10px]">
-        <p>{t("Спасибо за покупку!")}</p>
-        <p className="mt-1">shlakoblok-crm</p>
       </div>
     </div>
   );
@@ -84,9 +133,9 @@ export function Receipt({ sale }: ReceiptProps) {
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between gap-2">
-      <span className="text-[10px] text-zinc-600">{label}:</span>
-      <span className="text-right text-[10px] font-medium">{value}</span>
+    <div className="receipt-row">
+      <span className="receipt-row-label">{label}:</span>
+      <span className="receipt-row-value">{value}</span>
     </div>
   );
 }
@@ -109,60 +158,41 @@ export function printReceipt(sale: SaleWithRelations, locale: Locale = DEFAULT_L
     return;
   }
 
-  const unit = locale === "ru" ? "шт" : "dona";
-  const formatMoney = (value: number) => formatCurrencyForLocale(value, locale);
-  const formatWhen = (value: string | Date) => formatDateTimeForLocale(value, locale);
+  const data = receiptData(sale, locale);
+  const row = (label: string, value: string) =>
+    `<div class="receipt-row"><span class="receipt-row-label">${escapeHtml(label)}:</span><span class="receipt-row-value">${escapeHtml(value)}</span></div>`;
 
   const html = `
     <!DOCTYPE html>
-    <html lang="${locale}"><head>
+    <html lang="${locale === "ru" ? "ru" : "uz"}"><head>
       <meta charset="utf-8">
-      <title>${t("Чек №")} ${sale.id.slice(-8)}</title>
+      <title>ШЛАКОБЛОК</title>
       <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Courier New', monospace; font-size: 12px; }
-        .receipt { width: 80mm; padding: 8mm 4mm; margin: 0 auto; }
-        .center { text-align: center; }
-        .bold { font-weight: bold; }
-        .divider { border-top: 1px dashed #000; margin: 8px 0; padding-top: 8px; }
-        .double { border-top: 3px double #000; }
-        .row { display: flex; justify-content: space-between; margin: 2px 0; }
-        .total { font-size: 14px; font-weight: bold; }
+        html, body { margin: 0; padding: 0; }
+        ${RECEIPT_STYLES}
         @media print {
-          @page { size: 80mm auto; margin: 0; }
-          body { margin: 0; }
+          @page { margin: 0; }
         }
       </style>
     </head><body>
-      <div class="receipt">
-        <div class="center">
-          <p class="bold" style="font-size:14px">SHLAKOBLOK</p>
-          <p style="font-size:10px">${t("Учёт продаж шлакоблоков")}</p>
-          <p style="font-size:10px;margin-top:4px">${t("Кассовый чек")}</p>
+      <div class="receipt-content simple-receipt">
+        <p class="receipt-heading">ШЛАКОБЛОК</p>
+        ${row(t("Дата"), data.date)}
+        ${row(t("Оператор"), data.operator)}
+        <div class="receipt-client">
+          <p class="receipt-section-title">${escapeHtml(t("Клиент"))}:</p>
+          ${row(t("Марка авто"), data.carBrand)}
+          ${row(t("Гос. номер"), data.licensePlate)}
         </div>
-        <div class="divider">
-          <div class="row"><span>${t("Дата")}:</span><span>${formatWhen(sale.createdAt)}</span></div>
-          <div class="row"><span>${t("Чек №")}:</span><span>${sale.id.slice(-8).toUpperCase()}</span></div>
-          <div class="row"><span>${t("Оператор")}:</span><span>${escapeHtml(sale.user.displayName)}</span></div>
-        </div>
-        <div class="divider">
-          <p class="bold">${t("Клиент")}</p>
-          <div class="row"><span>${t("Марка авто")}:</span><span>${escapeHtml(sale.client.carBrand)}</span></div>
-          <div class="row"><span>${t("Гос. номер")}:</span><span>${escapeHtml(sale.client.licensePlate)}</span></div>
-          ${sale.client.phone ? `<div class="row"><span>${t("Телефон")}:</span><span>${escapeHtml(sale.client.phone)}</span></div>` : ""}
-        </div>
-        <div class="divider">
-          <p class="bold">${t("Товар")}</p>
-          <div class="row"><span>${t("Наименование")}:</span><span>${t("Шлакоблок")}</span></div>
-          <div class="row"><span>${t("Количество")}:</span><span>${sale.quantity} ${unit}</span></div>
-          <div class="row"><span>${t("Цена за шт")}:</span><span>${formatMoney(sale.pricePerUnit)}</span></div>
-        </div>
-        <div class="divider double">
-          <div class="row total"><span>${t("ИТОГО")}:</span><span>${formatMoney(sale.totalPrice)}</span></div>
-        </div>
-        ${sale.notes ? `<div class="divider"><p style="font-size:10px">${t("Примечание")}: ${escapeHtml(sale.notes)}</p></div>` : ""}
-        <div class="center" style="margin-top:16px;font-size:10px">
-          <p>${t("Спасибо за покупку!")}</p>
+        <div class="receipt-goods">
+          <div class="receipt-large-field">
+            <p>${escapeHtml(t("Наименование"))}:</p>
+            <p class="receipt-large-value">${escapeHtml(data.product)}</p>
+          </div>
+          <div class="receipt-large-field">
+            <p>${escapeHtml(t("Количество"))}:</p>
+            <p class="receipt-large-value">${escapeHtml(data.quantity)}</p>
+          </div>
         </div>
       </div>
       <script>window.onload = function() { window.print(); }</script>
